@@ -133,6 +133,8 @@ OPT_CONFIGS = {
     "baseline (skimage HSV, all groups)": F.FeatureConfig(),
     "fast HSV (PIL, all groups)": F.FeatureConfig(hsv="pil"),
     "lean (PIL HSV, colour + HOG only)": F.FeatureConfig(hsv="pil", groups=("colour", "hog")),
+    "lean + box 120x90 (from resolution study)": F.FeatureConfig(work_size=(120, 90), interpolation="box",
+                                                                 hsv="pil", groups=("colour", "hog")),
 }
 
 

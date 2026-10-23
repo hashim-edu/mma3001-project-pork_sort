@@ -58,5 +58,179 @@
    59
   ]
  },
- "script_seconds": 67.29324197769165
+ "script_seconds": 100.3566026687622,
+ "load_ms": {
+  "median": 2.2980465000728145,
+  "p10": 2.1286446000885917,
+  "p90": 2.742176400079188,
+  "mean": 2.4191101666626005,
+  "repeats": 30
+ },
+ "extract_ms": {
+  "median": 23.362784833337475,
+  "p10": 20.607114566667708,
+  "p90": 26.009157473336018,
+  "mean": 23.3172441555578,
+  "repeats": 3
+ },
+ "group_ms": {
+  "resize": 2.7559775001009257,
+  "rgb2hsv": 9.059717999889472,
+  "colour": 13.624707000190028,
+  "meat": 12.111614500099677,
+  "glare": 11.917734999997265,
+  "edges": 11.25576949993956,
+  "texture": 15.274193499863031,
+  "hog": 10.981568999795854,
+  "_note": "each group timed alone; includes resize + rgb2hsv + grey (about 11.70 ms)"
+ },
+ "line_profile": "results/profile_features.txt",
+ "classical_resolution": [
+  {
+   "work_size": [
+    120,
+    90
+   ],
+   "interpolation": "nearest",
+   "val_auc": 0.7565823888404534,
+   "test_auc": 0.7504201680672269,
+   "extract_ms": 7.553960999757692
+  },
+  {
+   "work_size": [
+    120,
+    90
+   ],
+   "interpolation": "bilinear",
+   "val_auc": 0.7557105492589362,
+   "test_auc": 0.6710084033613446,
+   "extract_ms": 9.08232599999792
+  },
+  {
+   "work_size": [
+    120,
+    90
+   ],
+   "interpolation": "bicubic",
+   "val_auc": 0.7428073234524847,
+   "test_auc": 0.6810924369747899,
+   "extract_ms": 9.4715879999967
+  },
+  {
+   "work_size": [
+    120,
+    90
+   ],
+   "interpolation": "box",
+   "val_auc": 0.7701830863121186,
+   "test_auc": 0.7285714285714285,
+   "extract_ms": 7.480021999754172
+  },
+  {
+   "work_size": [
+    240,
+    180
+   ],
+   "interpolation": "nearest",
+   "val_auc": 0.6857890148212729,
+   "test_auc": 0.6903361344537816,
+   "extract_ms": 31.930363499895975
+  },
+  {
+   "work_size": [
+    240,
+    180
+   ],
+   "interpolation": "bilinear",
+   "val_auc": 0.708456843940715,
+   "test_auc": 0.7357142857142857,
+   "extract_ms": 23.553209000056086
+  },
+  {
+   "work_size": [
+    240,
+    180
+   ],
+   "interpolation": "bicubic",
+   "val_auc": 0.7135135135135136,
+   "test_auc": 0.7250000000000001,
+   "extract_ms": 26.961847499933356
+  },
+  {
+   "work_size": [
+    240,
+    180
+   ],
+   "interpolation": "box",
+   "val_auc": 0.7574542284219703,
+   "test_auc": 0.6993697478991596,
+   "extract_ms": 28.349275999971724
+  },
+  {
+   "work_size": [
+    480,
+    360
+   ],
+   "interpolation": "nearest",
+   "val_auc": 0.7035745422842197,
+   "test_auc": 0.7105042016806723,
+   "extract_ms": 102.40870200004792
+  },
+  {
+   "work_size": [
+    480,
+    360
+   ],
+   "interpolation": "bilinear",
+   "val_auc": 0.7140366172624237,
+   "test_auc": 0.7457983193277311,
+   "extract_ms": 84.59951199984062
+  },
+  {
+   "work_size": [
+    480,
+    360
+   ],
+   "interpolation": "bicubic",
+   "val_auc": 0.7157802964254576,
+   "test_auc": 0.7447478991596639,
+   "extract_ms": 93.87268849991415
+  },
+  {
+   "work_size": [
+    480,
+    360
+   ],
+   "interpolation": "box",
+   "val_auc": 0.7279860505666959,
+   "test_auc": 0.6869747899159664,
+   "extract_ms": 90.4523640001571
+  }
+ ],
+ "feature_optimisation": {
+  "baseline (skimage HSV, all groups)": {
+   "extract_ms_per_frame": 23.20075086666596,
+   "n_features": 1439,
+   "val_auc": 0.7180470793374019,
+   "test_auc": 0.7390756302521008
+  },
+  "fast HSV (PIL, all groups)": {
+   "extract_ms_per_frame": 15.911163833334285,
+   "n_features": 1439,
+   "val_auc": 0.7201394943330427,
+   "test_auc": 0.7258403361344538
+  },
+  "lean (PIL HSV, colour + HOG only)": {
+   "extract_ms_per_frame": 7.4929399000059975,
+   "n_features": 1388,
+   "val_auc": 0.7182214472537053,
+   "test_auc": 0.715546218487395
+  },
+  "lean + box 120x90 (from resolution study)": {
+   "extract_ms_per_frame": 3.178823366670258,
+   "n_features": 1388,
+   "val_auc": 0.7581517000871839,
+   "test_auc": 0.7478991596638656
+  }
+ }
 }

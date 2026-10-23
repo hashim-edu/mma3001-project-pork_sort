@@ -1,0 +1,57 @@
+Timer unit: 0.001 s
+
+Total time: 0.142284 s
+File: /sessions/rcw-015req5bbcwjkgjph58ytgge/porksort_run/src/porksort/features.py
+Function: extract at line 146
+
+Line #      Hits         Time  Per Hit   % Time  Line Contents
+==============================================================
+   146                                           def extract(rgb: np.ndarray, cfg: FeatureConfig = FeatureConfig()) -> np.ndarray:
+   147                                               """Feature vector for one RGB frame.
+   148                                           
+   149                                               Args:
+   150                                                   rgb: (H, W, 3) uint8 array, any size. It is resized to ``cfg.work_size``.
+   151                                                   cfg: Feature settings.
+   152                                           
+   153                                               Returns:
+   154                                                   1-D float64 array. Its length depends only on ``cfg``.
+   155                                           
+   156                                               Raises:
+   157                                                   ValueError: If ``rgb`` is not an (H, W, 3) array.
+   158                                               """
+   159        10          0.0      0.0      0.0      if rgb.ndim != 3 or rgb.shape[2] != 3:
+   160                                                   raise ValueError(f"expected an (H, W, 3) RGB array, got shape {rgb.shape}")
+   161        10         15.7      1.6     11.0      small = resize(rgb, cfg.work_size, cfg.interpolation)
+   162        10         57.0      5.7     40.1      hsv = to_hsv(small, cfg.hsv)
+   163        10          1.9      0.2      1.3      grey = small.astype(np.float64) @ np.array([0.299, 0.587, 0.114]) / 255.0
+   164        10          0.0      0.0      0.0      parts: list[np.ndarray] = []
+   165        70          0.0      0.0      0.0      for g in cfg.groups:
+   166        60          0.0      0.0      0.0          if g == "colour":
+   167        10          4.2      0.4      3.0              parts.append(hsv_histogram(hsv))
+   168        50          0.0      0.0      0.0          elif g == "meat":
+   169        10          1.2      0.1      0.8              m = meat_mask(hsv)
+   170        10          0.3      0.0      0.2              frac = m.mean()
+   171        10          0.0      0.0      0.0              if m.any():
+   172        10          1.6      0.2      1.1                  yy, xx = np.nonzero(m)
+   173        10          0.2      0.0      0.2                  cx, cy = xx.mean() / m.shape[1], yy.mean() / m.shape[0]
+   174        10          0.6      0.1      0.4                  sx, sy = xx.std() / m.shape[1], yy.std() / m.shape[0]
+   175                                                       else:
+   176                                                           cx = cy = sx = sy = 0.0
+   177        10          0.0      0.0      0.0              parts.append(np.array([frac, cx, cy, sx, sy]))
+   178        40          0.0      0.0      0.0          elif g == "glare":
+   179        10          0.6      0.1      0.4              glare = (hsv[..., 2] > 0.85) & (hsv[..., 1] < 0.2)
+   180        10          1.9      0.2      1.3              parts.append(_grid_mean(glare.astype(float), 4, 3))
+   181        30          0.0      0.0      0.0          elif g == "edges":
+   182        10         11.9      1.2      8.3              parts.append(_grid_mean(sobel(grey), 6, 4))
+   183        20          0.0      0.0      0.0          elif g == "texture":
+   184        10         21.2      2.1     14.9              lbp = local_binary_pattern((grey * 255).astype(np.uint8), P=8, R=1, method="uniform")
+   185        10          4.2      0.4      2.9              hist, _ = np.histogram(lbp, bins=10, range=(0, 10))
+   186        10          0.1      0.0      0.0              parts.append(hist / hist.sum())
+   187        10          0.0      0.0      0.0          elif g == "hog":
+   188        10          1.9      0.2      1.3              hg = np.asarray(Image.fromarray((grey * 255).astype(np.uint8)).resize(cfg.hog_size, INTERPOLATION[cfg.interpolation]))
+   189        20         17.6      0.9     12.4              parts.append(hog(hg, orientations=9, pixels_per_cell=(16, 16), cells_per_block=(2, 2),
+   190        10          0.0      0.0      0.0                               block_norm="L2-Hys", feature_vector=True))
+   191                                                   else:
+   192                                                       raise ValueError(f"unknown feature group {g!r}")
+   193        10          0.1      0.0      0.0      return np.concatenate(parts).astype(np.float64)
+
