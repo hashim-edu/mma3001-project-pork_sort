@@ -1,0 +1,17 @@
+# Runtime (inference, classical models, evaluation)
+numpy>=1.24
+pandas>=2.0
+scikit-learn>=1.3
+scikit-image>=0.21
+pillow>=10.0
+matplotlib>=3.7
+onnxruntime>=1.16
+
+# Development: tests, test report, HTML docs, profiling
+pytest>=7
+pytest-html>=4
+pdoc>=14
+line_profiler>=4
+
+# YOLO training runs on Google Colab (see notebooks/03_train_yolo_colab.ipynb):
+# ultralytics>=8.3,<9

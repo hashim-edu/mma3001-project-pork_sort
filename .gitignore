@@ -1,0 +1,24 @@
+# Dataset (CC BY 4.0, download from Roboflow; not redistributed here)
+data/
+*.zip
+
+# Large model files (keep small ONNX/PT in results/yolo only if under 25 MB)
+*.pt
+!results/yolo/**/best.pt
+runs/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ipynb_checkpoints/
+*.lprof
+
+# OS / editor
+.DS_Store
+.vscode/
+.idea/
+
+# Generated feature caches
+results/cache/

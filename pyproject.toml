@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "porksort"
+version = "0.1.0"
+description = "Pass/fail inspection of packaged pork rasher trays from conveyor images (MMA3001 individual project)"
+readme = "README.md"
+license = { text = "MIT" }
+authors = [{ name = "Hashim Navas", email = "hnav0002@student.monash.edu" }]
+requires-python = ">=3.10"
+dependencies = [
+    "numpy>=1.24",
+    "pandas>=2.0",
+    "scikit-learn>=1.3",
+    "scikit-image>=0.21",
+    "pillow>=10.0",
+    "matplotlib>=3.7",
+    "onnxruntime>=1.16",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=7", "pytest-html>=4", "pdoc>=14", "line_profiler>=4"]
+train = ["ultralytics>=8.3,<9"]
+
+[project.scripts]
+porksort = "porksort.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
