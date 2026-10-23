@@ -59,12 +59,17 @@ class FeatureConfig:
         interpolation: Key of `INTERPOLATION` used for that resize.
         groups: Feature groups to include, in order.
         hog_size: (width, height) of the grey image used for HOG.
+        hsv: ``"skimage"`` (float64 reference conversion) or ``"pil"`` (fast
+            8-bit conversion in C). The 8-bit result is quantised to steps of
+            1/255, far finer than the 8 x 4 x 4 histogram bins; see
+            ``scripts/05_performance.py`` for the measured effect.
     """
 
     work_size: tuple[int, int] = (240, 180)
     interpolation: str = "bilinear"
     groups: tuple[str, ...] = ALL_GROUPS
     hog_size: tuple[int, int] = (128, 96)
+    hsv: str = "skimage"
 
     def key(self) -> str:
         """Short hash used to name feature caches."""
@@ -108,6 +113,30 @@ def _grid_mean(a: np.ndarray, nx: int, ny: int) -> np.ndarray:
     return np.array([a[ys[j]:ys[j + 1], xs[i]:xs[i + 1]].mean() for j in range(ny) for i in range(nx)])
 
 
+def to_hsv(rgb: np.ndarray, method: str = "skimage") -> np.ndarray:
+    """RGB uint8 -> HSV float64 in [0, 1] with the chosen implementation."""
+    if method == "skimage":
+        return rgb2hsv(rgb)
+    if method == "pil":
+        return np.asarray(Image.fromarray(rgb).convert("HSV"), dtype=np.float64) / 255.0
+    raise ValueError(f"unknown hsv method {method!r}; use 'skimage' or 'pil'")
+
+
+def hsv_histogram(hsv: np.ndarray, bins: tuple[int, int, int] = (8, 4, 4)) -> np.ndarray:
+    """Normalised joint HSV histogram with equal-width bins on [0, 1].
+
+    Computes each pixel's bin index directly and counts with ``np.bincount``,
+    which gives the same counts as ``np.histogramdd`` with
+    ``range=((0, 1),) * 3`` (a value of exactly 1.0 goes in the last bin) but
+    avoids its per-dimension sorting.
+    """
+    flat = np.zeros(hsv.shape[:2], dtype=np.int64)
+    for i, b in enumerate(bins):
+        flat = flat * b + np.minimum((hsv[..., i] * b).astype(np.int64), b - 1)
+    hist = np.bincount(flat.ravel(), minlength=int(np.prod(bins))).astype(np.float64)
+    return hist / hist.sum()
+
+
 def meat_mask(hsv: np.ndarray) -> np.ndarray:
     """Boolean mask of meat-coloured pixels (red to pink, saturated, not dark)."""
     h, s, v = hsv[..., 0], hsv[..., 1], hsv[..., 2]
@@ -130,13 +159,12 @@ def extract(rgb: np.ndarray, cfg: FeatureConfig = FeatureConfig()) -> np.ndarray
     if rgb.ndim != 3 or rgb.shape[2] != 3:
         raise ValueError(f"expected an (H, W, 3) RGB array, got shape {rgb.shape}")
     small = resize(rgb, cfg.work_size, cfg.interpolation)
-    hsv = rgb2hsv(small)
+    hsv = to_hsv(small, cfg.hsv)
     grey = small.astype(np.float64) @ np.array([0.299, 0.587, 0.114]) / 255.0
     parts: list[np.ndarray] = []
     for g in cfg.groups:
         if g == "colour":
-            hist, _ = np.histogramdd(hsv.reshape(-1, 3), bins=(8, 4, 4), range=((0, 1), (0, 1), (0, 1)))
-            parts.append(hist.ravel() / hist.sum())
+            parts.append(hsv_histogram(hsv))
         elif g == "meat":
             m = meat_mask(hsv)
             frac = m.mean()
@@ -170,7 +198,7 @@ def group_slices(cfg: FeatureConfig = FeatureConfig()) -> dict[str, slice]:
     dummy = np.zeros((cfg.work_size[1], cfg.work_size[0], 3), dtype=np.uint8)
     out, start = {}, 0
     for g in cfg.groups:
-        n = len(extract(dummy, FeatureConfig(cfg.work_size, cfg.interpolation, (g,), cfg.hog_size)))
+        n = len(extract(dummy, FeatureConfig(cfg.work_size, cfg.interpolation, (g,), cfg.hog_size, cfg.hsv)))
         out[g] = slice(start, start + n)
         start += n
     return out

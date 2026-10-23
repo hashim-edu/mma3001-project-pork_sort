@@ -129,3 +129,28 @@ def test_mlp_flops_and_roofline():
     assert mlp_flops([10, 5, 1]) == (2 * 10 * 5 + 5) + (2 * 5 + 1)
     assert roofline(0.5, peak_flops=100.0, bandwidth=50.0) == 25.0   # memory-bound
     assert roofline(10.0, peak_flops=100.0, bandwidth=50.0) == 100.0  # compute-bound
+
+
+# ---------- optimised feature code agrees with the reference ----------
+
+def test_bincount_histogram_equals_histogramdd():
+    from porksort.features import hsv_histogram, to_hsv
+
+    rng = np.random.default_rng(5)
+    for _ in range(10):
+        hsv = to_hsv(rng.integers(0, 255, (40, 60, 3), dtype=np.uint8))
+        hsv[0, 0] = 1.0  # exact upper edge goes in the last bin, as in histogramdd
+        ref, _ = np.histogramdd(hsv.reshape(-1, 3), bins=(8, 4, 4), range=((0, 1),) * 3)
+        counts = np.rint(hsv_histogram(hsv) * hsv[..., 0].size)  # undo normalisation
+        assert np.array_equal(counts, ref.ravel())
+
+
+def test_pil_hsv_within_one_quantisation_step():
+    from porksort.features import to_hsv
+
+    rgb = np.random.default_rng(6).integers(0, 255, (50, 50, 3), dtype=np.uint8)
+    d = np.abs(to_hsv(rgb, "skimage") - to_hsv(rgb, "pil"))
+    d[..., 0] = np.minimum(d[..., 0], 1 - d[..., 0])  # hue is circular
+    assert d.max() <= 1 / 255 + 1e-9
+    with pytest.raises(ValueError):
+        to_hsv(rgb, "opencv")

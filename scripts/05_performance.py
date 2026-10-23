@@ -12,6 +12,7 @@ Sections:
 ``ablation``    accuracy lost by dropping each feature group (logistic
                 regression, blocked split), so a slow group can be removed only
                 if it is not paying for itself.
+``optimise``    baseline vs optimised feature extraction: time and accuracy.
 ``resolution``  classical pipeline: working resolution x interpolation method
                 -> accuracy and time.
 ``yolo``        YOLO: FLOPs and arithmetic intensity from the ONNX graph
@@ -125,6 +126,33 @@ def section_ablation(index, out):
                                "val_auc": auc(ys["val"], m.predict_proba(Xs["val"][:, cols])[:, 1]),
                                "test_auc": auc(ys["test"], m.predict_proba(Xs["test"][:, cols])[:, 1])}
     out["ablation_logreg_drop_group"] = res
+
+
+# -------------------------------------------------------------------- optimise
+OPT_CONFIGS = {
+    "baseline (skimage HSV, all groups)": F.FeatureConfig(),
+    "fast HSV (PIL, all groups)": F.FeatureConfig(hsv="pil"),
+    "lean (PIL HSV, colour + HOG only)": F.FeatureConfig(hsv="pil", groups=("colour", "hog")),
+}
+
+
+def section_optimise(index, out, accuracy=True):
+    """Feature-extraction optimisation guided by the profile and the ablation."""
+    imgs = [F.load_rgb(p) for p in index["image"].iloc[:30]]
+    P = parts_blocked(index)
+    res = {}
+    for name, cfg in OPT_CONFIGS.items():
+        t = time_call(lambda: [F.extract(im, cfg) for im in imgs], repeats=3, warmup=1)
+        r = {"extract_ms_per_frame": t["median"] / len(imgs), "n_features": int(len(F.extract(imgs[0], cfg)))}
+        if accuracy:
+            X = {s: F.extract_many(d["image"], cfg, cache_dir=RESULTS_DIR / "cache") for s, d in P.items()}
+            y = {s: d["fail"].to_numpy().astype(int) for s, d in P.items()}
+            m = fit_logreg(X["train"], y["train"])
+            r["val_auc"] = auc(y["val"], m.predict_proba(X["val"])[:, 1])
+            r["test_auc"] = auc(y["test"], m.predict_proba(X["test"])[:, 1])
+        res[name] = r
+        print("optimise", name, {k: round(v, 3) for k, v in r.items()})
+    out["feature_optimisation"] = res
 
 
 # ------------------------------------------------------------------ resolution
@@ -263,7 +291,7 @@ def section_repeat(index, out):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--machine", default=platform.node() or "unknown")
-    ap.add_argument("--sections", nargs="+", default=["profile", "ablation", "resolution", "yolo", "repeat"])
+    ap.add_argument("--sections", nargs="+", default=["profile", "ablation", "optimise", "resolution", "yolo", "repeat"])
     args = ap.parse_args()
     FIG.mkdir(parents=True, exist_ok=True)
     index = build_index()
@@ -271,12 +299,16 @@ def main():
            "cpu_count": os.cpu_count()}
     secs = set(args.sections)
     if "timing" in secs:
-        secs |= {"profile", "yolo_timing"}
+        secs |= {"profile", "yolo_timing", "optimise_timing"}
     t0 = time.time()
     if "profile" in secs:
         section_profile(index, out)
     if "ablation" in secs:
         section_ablation(index, out)
+    if "optimise" in secs:
+        section_optimise(index, out, accuracy=True)
+    elif "optimise_timing" in secs:
+        section_optimise(index, out, accuracy=False)
     if "resolution" in secs:
         section_resolution(index, out)
     if "yolo" in secs:
