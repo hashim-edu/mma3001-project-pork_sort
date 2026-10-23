@@ -40,7 +40,7 @@ def resolve_threshold(arg: str, weights: Path) -> float:
         return t
     f = weights.parent.parent / "threshold.json"
     if not f.exists():
-        raise FileNotFoundError(f"{f} not found; run scripts/04_evaluate_yolo.py or pass --threshold")
+        raise FileNotFoundError(f"{f} not found; run scripts/04_evaluate_and_compare.py or pass --threshold")
     return float(json.loads(f.read_text())["threshold"])
 
 

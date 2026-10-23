@@ -42,7 +42,7 @@ open reports/index.html
 2. `python scripts/01_data_audit.py`: class balance, leakage analysis, builds `splits/blocked_split.csv`.
 3. `python scripts/02_classical_models.py`: baseline, logistic regression, decision tree, SVM and MLP on both splits.
 4. `notebooks/03_train_yolo_colab.ipynb` on Google Colab (T4 GPU): trains YOLOv8n, exports ONNX. Unzip its output into `results/yolo/`.
-5. `python scripts/04_evaluate_yolo.py`: pass/fail evaluation of YOLO, threshold choice, comparison with Ultralytics' own predictions.
+5. `python scripts/04_evaluate_and_compare.py`: pass/fail evaluation of YOLO, threshold choice, comparison with Ultralytics' own predictions.
 6. `python scripts/05_performance.py`: timing, profiling, FLOPs and arithmetic intensity, resolution, interpolation and precision sensitivity.
 
 All random choices are seeded. The blocked split is committed so every machine uses the same frames.
