@@ -17,7 +17,7 @@ Pipeline for one frame::
 
 The output tensor layout and the letterbox follow Ultralytics YOLOv8. Our
 output is checked against Ultralytics' own predictions in
-``scripts/04_evaluate_yolo.py`` (verification against an established
+``scripts/04_evaluate_and_compare.py`` (verification against an established
 implementation).
 """
 
