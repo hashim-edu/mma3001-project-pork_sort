@@ -142,8 +142,81 @@ def examples():
     plt.close(fig)
 
 
+# M4 performance-core peak from the unit's formula: cores x clock x fp32 lanes x FMA x FP pipes.
+# The 4 pipes per core is an estimate from microarchitecture analyses, not an Apple figure.
+M4_PEAK_GFLOPS = 4 * 4.4 * 4 * 2 * 4      # = 563.2
+M4_BW_GBS = 120.0
+T4_PEAK_GFLOPS, T4_BW_GBS = 8100.0, 320.0
+
+
+def roofline_fig():
+    """Roofline of the M4 CPU and Colab T4 with YOLOv8n's layers and the measured M4 point."""
+    import numpy as np
+
+    prof_f = RESULTS_DIR / "yolo_layer_profile.json"
+    mac_f = RESULTS_DIR / "performance_mac_vm.json"
+    if not (prof_f.exists() and mac_f.exists()):
+        print("roofline skipped")
+        return
+    prof = json.loads(prof_f.read_text())
+    mac = json.loads(mac_f.read_text())["yolo"]
+    ai_net = mac["arithmetic_intensity_whole_net"]
+    achieved = next(v["achieved_gflops_per_s"] for v in mac["variants"] if v.get("achieved_gflops_per_s"))
+    ai = np.logspace(-1, 3, 200)
+    fig, ax = plt.subplots(figsize=(6, 3.6))
+    ax.loglog(ai, np.minimum(M4_PEAK_GFLOPS, ai * M4_BW_GBS), color="C0", lw=2, label="M4, 4 performance cores (est.)")
+    ax.loglog(ai, np.minimum(T4_PEAK_GFLOPS, ai * T4_BW_GBS), color="0.5", lw=1.2, ls="--", label="Colab T4 GPU (fp32)")
+    for r in prof:
+        ax.axvline(r["ai"], ymin=0, ymax=0.04, color="0.6", lw=0.6)
+    ax.plot([ai_net], [achieved], "o", color="C3", ms=7,
+            label=f"YOLOv8n on M4: {achieved:.0f} GFLOP/s at {ai_net:.0f} FLOP/byte")
+    ax.axvline(M4_PEAK_GFLOPS / M4_BW_GBS, color="C0", lw=0.8, ls=":")
+    ax.text(M4_PEAK_GFLOPS / M4_BW_GBS * 1.1, 2, f"M4 balance {M4_PEAK_GFLOPS / M4_BW_GBS:.1f}", fontsize=7, color="C0")
+    ax.set_xlabel("arithmetic intensity (FLOP/byte); ticks = individual conv layers")
+    ax.set_ylabel("attainable GFLOP/s")
+    ax.set_title("YOLOv8n is compute-bound on the M4 and runs at about a quarter of the roof", fontsize=9)
+    ax.set_ylim(1, 2e4)
+    ax.legend(fontsize=7, loc="upper left")
+    fig.tight_layout()
+    fig.savefig(FIG / "roofline.png", dpi=150)
+    plt.close(fig)
+
+
+def yolo_resolution_fig():
+    """Validation and test AUC (from the container run) against M4 CPU time, per input size."""
+    cont_f = RESULTS_DIR / "performance_container.json"
+    mac_f = RESULTS_DIR / "performance_mac_vm.json"
+    if not (cont_f.exists() and mac_f.exists()):
+        return
+    acc = {v["imgsz"]: v for v in json.loads(cont_f.read_text())["yolo"]["variants"]
+           if v["precision"] == "fp32" and "val_auc" in v}
+    tm = {v["imgsz"]: v["inference_ms"]["median"] for v in json.loads(mac_f.read_text())["yolo"]["variants"]
+          if v["precision"] == "fp32" and v["threads"] == "default"}
+    sizes = sorted(set(acc) & set(tm))
+    fig, (a1, a2) = plt.subplots(1, 2, figsize=(8, 3.2))
+    a1.plot(sizes, [acc[s]["val_auc"] for s in sizes], "o-", color="C0", label="validation")
+    a1.plot(sizes, [acc[s]["test_auc"] for s in sizes], "s--", color="0.5", label="test")
+    a1.set_ylim(0.80, 0.92)
+    a1.set_xlabel("network input size (px)")
+    a1.set_ylabel("ROC AUC")
+    a1.legend(fontsize=7)
+    a1.set_title("Accuracy barely changes with input size", fontsize=9)
+    a2.plot(sizes, [tm[s] for s in sizes], "o-", color="C3")
+    a2.set_xlabel("network input size (px)")
+    a2.set_ylabel("M4 CPU inference time (ms)")
+    a2.set_title("Time grows with pixel count", fontsize=9)
+    for s in sizes:
+        a2.annotate(f"{tm[s]:.0f}", (s, tm[s]), textcoords="offset points", xytext=(4, -10), fontsize=7)
+    fig.suptitle("YOLOv8n trained at 640 px, run at other input sizes", fontsize=9)
+    fig.tight_layout()
+    fig.savefig(FIG / "yolo_resolution.png", dpi=150)
+    plt.close(fig)
+
+
 if __name__ == "__main__":
     FIG.mkdir(parents=True, exist_ok=True)
     pipeline()
     examples()
+    roofline_fig()
+    yolo_resolution_fig()
     print("figures written to", FIG)

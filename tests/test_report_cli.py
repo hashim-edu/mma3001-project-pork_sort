@@ -65,3 +65,17 @@ def test_cli_bad_arguments(tmp_path):
     assert cli.main(["inspect", str(tmp_path), "--threshold", "1.7", "--weights", str(tmp_path / "w.onnx")]) == 1
     assert cli.main(["inspect", str(tmp_path / "empty_dir_missing"), "--threshold", "0.5",
                      "--weights", str(tmp_path / "w.onnx")]) == 1
+
+
+def test_resolve_threshold_by_weights_and_cost_ratio(tmp_path):
+    run = tmp_path / "run"
+    (run / "weights").mkdir(parents=True)
+    w = run / "weights" / "best_fp32_480.onnx"
+    w.write_text("")
+    (run / "threshold.json").write_text(json.dumps({"best_fp32_480.onnx": {"1": 0.13, "10": 0.007}}))
+    assert cli.resolve_threshold("auto", w, 10) == 0.007
+    assert cli.resolve_threshold("auto", w, 1.0) == 0.13
+    assert cli.resolve_threshold("0.4", w) == 0.4
+    import pytest
+    with pytest.raises(ValueError, match="no threshold"):
+        cli.resolve_threshold("auto", w, 7)

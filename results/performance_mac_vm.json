@@ -4,44 +4,143 @@
  "python": "3.10.12",
  "cpu_count": 4,
  "load_ms": {
-  "median": 2.189854000107516,
-  "p10": 2.1399961001407064,
-  "p90": 2.257620499995028,
-  "mean": 2.2049666667347387,
+  "median": 2.294896001330926,
+  "p10": 2.2240663995034993,
+  "p90": 2.4230669980170205,
+  "mean": 2.3092069002207913,
   "repeats": 30
  },
  "extract_ms": {
-  "median": 13.408129166661334,
-  "p10": 13.396425833331401,
-  "p90": 13.438003620006688,
-  "mean": 13.41570046666776,
+  "median": 13.928923599936146,
+  "p10": 13.860025840064433,
+  "p90": 13.965878080004282,
+  "mean": 13.91561390001799,
   "repeats": 3
  },
  "group_ms": {
-  "resize": 1.4912499998445128,
-  "rgb2hsv": 5.3348755002389225,
-  "colour": 7.331728999815823,
-  "meat": 7.371187500211818,
-  "glare": 7.172999999966123,
-  "edges": 8.022937500072658,
-  "texture": 9.47118799990676,
-  "hog": 8.688062500141314,
-  "_note": "each group timed alone; includes resize + rgb2hsv + grey (about 7.33 ms)"
+  "resize": 1.5098749991011573,
+  "rgb2hsv": 5.538541498026461,
+  "colour": 7.6211255000089295,
+  "meat": 7.661749999897438,
+  "glare": 7.383729000139283,
+  "edges": 8.2352079989505,
+  "texture": 9.840187998634065,
+  "hog": 9.02262500130746,
+  "_note": "each group timed alone; includes resize + rgb2hsv + grey (about 7.65 ms)"
  },
  "line_profile": "results/profile_features.txt",
  "feature_optimisation": {
   "baseline (skimage HSV, all groups)": {
-   "extract_ms_per_frame": 13.468197233335863,
+   "extract_ms_per_frame": 13.879418066668828,
    "n_features": 1439
   },
   "fast HSV (PIL, all groups)": {
-   "extract_ms_per_frame": 8.748700000008588,
+   "extract_ms_per_frame": 9.010350033228557,
    "n_features": 1439
   },
   "lean (PIL HSV, colour + HOG only)": {
-   "extract_ms_per_frame": 4.741272233331983,
+   "extract_ms_per_frame": 4.873341666704316,
+   "n_features": 1388
+  },
+  "lean + box 120x90 (from resolution study)": {
+   "extract_ms_per_frame": 2.8361360999648846,
    "n_features": 1388
   }
  },
- "script_seconds": 8.734604597091675
+ "script_seconds": 39.029125690460205,
+ "yolo": {
+  "conv_layers": 64,
+  "gflops_conv_640": 8.6576548,
+  "mbytes_conv_640": 152.613116,
+  "arithmetic_intensity_whole_net": 56.729428157406865,
+  "ai_per_layer": {
+   "min": 0.4705750539200583,
+   "median": 70.53250821300328,
+   "max": 173.536608319217
+  },
+  "ultralytics_model_info": "None",
+  "colab_gpu_predict_ms_median": 10.469156500107601,
+  "variants": [
+   {
+    "precision": "fp32",
+    "imgsz": 640,
+    "threads": "default",
+    "inference_ms": {
+     "median": 61.88854149877443,
+     "p10": 59.0770213988435,
+     "p90": 67.37319999992906,
+     "mean": 62.354190333159444,
+     "repeats": 30
+    },
+    "end_to_end_ms": 66.43139550033084,
+    "achieved_gflops_per_s": 139.89107822441485
+   },
+   {
+    "precision": "fp32",
+    "imgsz": 640,
+    "threads": 1,
+    "inference_ms": {
+     "median": 206.97554150137876,
+     "p10": 206.17380359763047,
+     "p90": 208.99324259917194,
+     "mean": 207.47119590014336,
+     "repeats": 30
+    },
+    "end_to_end_ms": 213.19760500227858
+   },
+   {
+    "precision": "fp16",
+    "imgsz": 640,
+    "threads": "default",
+    "inference_ms": {
+     "median": 42.87185400062299,
+     "p10": 40.968370798873366,
+     "p90": 44.95517979848955,
+     "mean": 43.133002866549454,
+     "repeats": 30
+    },
+    "end_to_end_ms": 52.06797949904285
+   },
+   {
+    "precision": "fp32",
+    "imgsz": 320,
+    "threads": "default",
+    "inference_ms": {
+     "median": 17.659770501268213,
+     "p10": 16.949145600301563,
+     "p90": 19.129741298456793,
+     "mean": 17.86574583420588,
+     "repeats": 30
+    },
+    "end_to_end_ms": 21.18679150044045
+   },
+   {
+    "precision": "fp32",
+    "imgsz": 480,
+    "threads": "default",
+    "inference_ms": {
+     "median": 36.73714549950091,
+     "p10": 35.49017920013284,
+     "p90": 37.92199940144201,
+     "mean": 36.69725269974151,
+     "repeats": 30
+    },
+    "end_to_end_ms": 41.14760400079831
+   },
+   {
+    "precision": "fp32",
+    "imgsz": 800,
+    "threads": "default",
+    "inference_ms": {
+     "median": 98.54585450193554,
+     "p10": 97.09530100153643,
+     "p90": 100.72675890114624,
+     "mean": 99.45244593363896,
+     "repeats": 30
+    },
+    "end_to_end_ms": 105.41502050182316
+   }
+  ],
+  "pass_fail_threshold_used_for_640": 0.004284203052520752
+ }
 }
