@@ -1,0 +1,18 @@
+{
+ "blocked": {
+  "onnx_vs_ultralytics": {
+   "frames": 60,
+   "frame_score_abs_diff_max": 0.29947593808174133,
+   "frame_score_abs_diff_mean": 0.03920472441241145,
+   "ultralytics_boxes_conf_ge_0.25": 41,
+   "matched_iou_ge_0.9": 34,
+   "matched_iou_median": 0.9406178079856249
+  },
+  "fp16_vs_fp32": {
+   "frames": 60,
+   "score_abs_diff_max": 0.0008409321308135986,
+   "score_abs_diff_mean": 0.00021097411712010702,
+   "decision_flips": 0
+  }
+ }
+}

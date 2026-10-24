@@ -8,7 +8,8 @@ Inspect one image, several images, or a folder::
 Options:
     --weights    ONNX model (default: the blocked-split YOLOv8n model).
     --threshold  Pass/fail threshold in [0, 1], or ``auto`` (default) to use
-                 the cost-optimal threshold saved next to the weights.
+                 the threshold chosen on validation data for ``--cost-ratio``.
+    --cost-ratio Cost of a false PASS relative to a false FAIL (default 10).
     --out        Output folder for per-frame JSON/PNG and the batch index.html.
 
 Exit code is 0 if every frame was inspected (PASS or FAIL), 2 if any frame
@@ -28,11 +29,22 @@ from .decision import decide
 from .features import load_rgb
 from .report import InspectionReport, batch_summary, defects_to_dicts, input_warnings, write_report
 
-DEFAULT_WEIGHTS = REPO_ROOT / "results" / "yolo" / "yolov8n_blocked" / "weights" / "best_fp32.onnx"
+#: Selected model: YOLOv8n trained at 640 px, run at 480 px (same validation AUC, about half the time).
+DEFAULT_WEIGHTS = REPO_ROOT / "results" / "yolo" / "yolov8n_blocked" / "weights" / "best_fp32_480.onnx"
 
 
-def resolve_threshold(arg: str, weights: Path) -> float:
-    """Parse ``--threshold``; ``auto`` reads ``threshold.json`` from the run folder."""
+def resolve_threshold(arg: str, weights: Path, cost_ratio: float = 10.0) -> float:
+    """Parse ``--threshold``.
+
+    ``auto`` looks up the threshold chosen on validation data for this weights
+    file and cost ratio in ``threshold.json`` (written by
+    ``scripts/04_evaluate_and_compare.py``).
+
+    Raises:
+        ValueError: If the threshold is outside [0, 1] or no threshold was
+            chosen for that weights file and cost ratio.
+        FileNotFoundError: If ``threshold.json`` is missing.
+    """
     if arg != "auto":
         t = float(arg)
         if not 0.0 <= t <= 1.0:
@@ -41,7 +53,11 @@ def resolve_threshold(arg: str, weights: Path) -> float:
     f = weights.parent.parent / "threshold.json"
     if not f.exists():
         raise FileNotFoundError(f"{f} not found; run scripts/04_evaluate_and_compare.py or pass --threshold")
-    return float(json.loads(f.read_text())["threshold"])
+    table = json.loads(f.read_text()).get(weights.name, {})
+    key = str(int(cost_ratio)) if float(cost_ratio).is_integer() else str(cost_ratio)
+    if key not in table:
+        raise ValueError(f"no threshold for {weights.name} at cost ratio {cost_ratio}; available: {sorted(table)}")
+    return float(table[key])
 
 
 def collect_inputs(paths: list[str]) -> list[Path]:
@@ -93,12 +109,14 @@ def main(argv: list[str] | None = None) -> int:
     ins = sub.add_parser("inspect", help="inspect images and write reports")
     ins.add_argument("paths", nargs="+", help="image files or folders")
     ins.add_argument("--weights", type=Path, default=DEFAULT_WEIGHTS)
-    ins.add_argument("--threshold", default="auto")
+    ins.add_argument("--threshold", default="auto", help="number in [0, 1], or 'auto' (from validation)")
+    ins.add_argument("--cost-ratio", type=float, default=10.0,
+                     help="cost of a false PASS relative to a false FAIL, for --threshold auto (1, 2, 3, 5, 10, 20, 50)")
     ins.add_argument("--out", type=Path, default=Path("reports"))
     args = ap.parse_args(argv)
 
     try:
-        thr = resolve_threshold(args.threshold, args.weights)
+        thr = resolve_threshold(args.threshold, args.weights, args.cost_ratio)
         paths = collect_inputs(args.paths)
         if not paths:
             raise ValueError("no input files found")

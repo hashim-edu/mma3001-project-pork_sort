@@ -218,7 +218,8 @@ def section_yolo(index, out, accuracy=True):
 
     P = parts_blocked(index)
     img0 = F.load_rgb(P["test"]["image"].iloc[0])
-    thr = json.loads((run / "threshold.json").read_text())["threshold"] if (run / "threshold.json").exists() else 0.25
+    tj = json.loads((run / "threshold.json").read_text()) if (run / "threshold.json").exists() else {}
+    thr = tj.get("best_fp32.onnx", {}).get("10")
     variants = [("fp32", 640, "best_fp32.onnx"), ("fp16", 640, "best_fp16.onnx"),
                 ("fp32", 320, "best_fp32_320.onnx"), ("fp32", 480, "best_fp32_480.onnx"),
                 ("fp32", 800, "best_fp32_800.onnx")]

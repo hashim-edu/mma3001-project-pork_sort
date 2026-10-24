@@ -84,7 +84,7 @@ def pipeline():
 def examples():
     """Grid of blocked-test frames: GT (dashed) vs YOLO (solid), sorted by error type."""
     run = RESULTS_DIR / "yolo" / "yolov8n_blocked"
-    if not (run / "predictions.json").exists():
+    if not (run / "predictions_best_fp32_480.json").exists():
         print("examples skipped: no YOLO predictions")
         return
     import numpy as np
@@ -95,8 +95,10 @@ def examples():
     from porksort.report import COLOURS
     from porksort.splits import load_split
 
-    preds = json.loads((run / "predictions.json").read_text())
-    thr = json.loads((run / "threshold.json").read_text())["threshold"]
+    # Selected model (ONNX, 480 px input) at the cost ratio 1 operating point: at r = 10 its
+    # validation threshold fails every frame, which would show no PASS decisions at all.
+    preds = json.loads((run / "predictions_best_fp32_480.json").read_text())
+    thr = json.loads((run / "threshold.json").read_text())["best_fp32_480.onnx"]["1"]
     df = load_split(build_index(), "blocked")
     te = df[df.split == "test"].copy()
     te["score"] = [frame_score([Box(**b) for b in preds[Path(p).name]]) for p in te["image"]]
@@ -132,7 +134,8 @@ def examples():
         ax.imshow(im)
         gt = r.classes.replace("|", ", ") or "no defect"
         ax.set_title(f"{g}\nGT: {gt}; score {r.score:.2f}", fontsize=7)
-    fig.suptitle(f"Blocked test frames: dashed white = ground truth, solid = YOLO boxes >= threshold {thr:.2f}",
+    fig.suptitle(f"Blocked test frames, YOLOv8n at 480 px, threshold {thr:.2f} (cost ratio 1): "
+                 "dashed white = ground truth, solid = detections at or above threshold",
                  fontsize=8)
     fig.tight_layout()
     fig.savefig(FIG / "examples_blocked_test.png", dpi=140)

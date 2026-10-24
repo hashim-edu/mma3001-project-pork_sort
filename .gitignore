@@ -22,3 +22,8 @@ __pycache__/
 
 # Generated feature caches
 results/cache/
+
+# Extra YOLO exports used only for the resolution study (regenerate with the Colab notebook)
+results/yolo/**/best_fp32_320.onnx
+results/yolo/**/best_fp32_800.onnx
+results/yolo/**/train_batch*.jpg
