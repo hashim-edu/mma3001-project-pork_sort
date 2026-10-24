@@ -18,9 +18,9 @@ Blocked test split (174 frames, 34 PASS), thresholds chosen on validation data:
 | Logistic regression on handcrafted features | 0.739 (0.649 to 0.823) | best classical model |
 | YOLOv8n, ONNX, 480 px input (selected) | 0.887 (0.810 to 0.947) | +0.148 over logistic regression (paired 95% CI 0.068 to 0.235) |
 
-- At the design cost ratio (a missed defect costs 10 re-checks) no model beats re-checking every pack;
-  the selected detector pays off at a cost ratio of 1, where it passes 56% of good frames and lets 3.6%
-  of defective frames through.
+- At the design cost ratio (a missed defect costs 10 re-checks) no model does materially better than
+  re-checking every pack (the best passes 2 of 34 good test frames); the selected detector pays off at a
+  cost ratio of 1, where it passes 56% of good frames and lets 3.6% of defective frames through.
 - Apple M4 CPU: 36.7 ms inference, 41 ms end to end per frame at 480 px.
 - The provided Roboflow split leaks (test frames sit within 1 to 30 frames of training frames) and
   inflates classical AUC by 0.07 to 0.10; all headline results use the blocked split.
@@ -40,6 +40,14 @@ Decision rule: a frame FAILs if any defect is detected with confidence at or abo
 threshold is chosen on validation data to minimise expected cost for a given cost ratio r (cost of a
 false PASS divided by the cost of a false FAIL); the thresholds are stored in
 `results/yolo/yolov8n_blocked/threshold.json`.
+
+## Requirements
+
+- Python 3.10 or newer (developed on 3.13, timed on 3.10). No GPU is needed for inspection or for the
+  analysis scripts; only YOLO training needs one, and it runs on Google Colab.
+- Python packages: `requirements.txt` (runtime plus the test, documentation and profiling tools).
+  `pip install -e ".[dev]"` installs the same development tools from `pyproject.toml`.
+- About 1 GB of disk for the dataset, the feature cache and the model files, plus the Python packages.
 
 ## Quick start
 
@@ -102,17 +110,21 @@ tests/             pytest suite (synthetic data, no dataset needed)
 docs/              HTML API documentation (pdoc) and pytest HTML test report
 ```
 
-## Tests and documentation
+## Tests, documentation and code style
 
 ```bash
 pytest --doctest-modules src tests --html=docs/test_report.html --self-contained-html
 pdoc src/porksort -o docs/api --docformat google
+ruff check src tests scripts && ruff format --check src tests scripts
 ```
 
-49 tests, including manufactured-solution checks (decoding a hand-encoded box, the convolution FLOP
-formula against a loop count, the threshold search against brute force, the optimised histogram against
-NumPy's reference). Open `docs/api/index.html` for the API documentation and `docs/test_report.html` for
-the latest test report.
+52 tests (46 unit tests and 6 docstring examples), including manufactured-solution checks: decoding a
+hand-encoded box, the convolution FLOP formula against a loop count, the threshold search against brute
+force, and the optimised histogram against NumPy's reference. Open `docs/api/index.html` for the API
+documentation and `docs/test_report.html` for the latest test report.
+
+Every public function has a Google-style docstring giving its arguments, return value and the errors it
+raises. Code is formatted and linted with ruff (settings in `pyproject.toml`, 110-character lines).
 
 ## Data
 

@@ -28,7 +28,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass
 from pathlib import Path
 
 import numpy as np
@@ -72,15 +72,25 @@ class FeatureConfig:
     hsv: str = "skimage"
 
     def key(self) -> str:
-        """Short hash used to name feature caches."""
+        """Short hash of the settings, used to name feature caches.
+
+        Returns:
+            The first 10 hex digits of the SHA-1 of the settings as JSON.
+        """
         return hashlib.sha1(json.dumps(asdict(self), sort_keys=True).encode()).hexdigest()[:10]
 
 
 def load_rgb(path: str | Path) -> np.ndarray:
-    """Load an image as an RGB uint8 array (H, W, 3).
+    """Load an image file as an RGB array.
 
     Grey, RGBA and palette images are converted to RGB. EXIF orientation is
     not applied because the Roboflow export already stripped it.
+
+    Args:
+        path: Image file (.jpg, .jpeg, .png or .bmp).
+
+    Returns:
+        (H, W, 3) uint8 array.
 
     Raises:
         FileNotFoundError: If the path does not exist.
@@ -100,7 +110,20 @@ def load_rgb(path: str | Path) -> np.ndarray:
 
 
 def resize(rgb: np.ndarray, size: tuple[int, int], method: str = "bilinear") -> np.ndarray:
-    """Resize an RGB array to ``size`` = (width, height) with a named method."""
+    """Resize an RGB array with a named interpolation method.
+
+    Args:
+        rgb: (H, W, 3) uint8 array.
+        size: Target (width, height) in pixels.
+        method: Key of `INTERPOLATION`: ``nearest``, ``bilinear``, ``bicubic``,
+            ``lanczos`` or ``box`` (area averaging).
+
+    Returns:
+        (height, width, 3) uint8 array.
+
+    Raises:
+        ValueError: For an unknown method.
+    """
     if method not in INTERPOLATION:
         raise ValueError(f"unknown interpolation {method!r}; choose from {sorted(INTERPOLATION)}")
     return np.asarray(Image.fromarray(rgb).resize(size, INTERPOLATION[method]))
@@ -110,11 +133,23 @@ def _grid_mean(a: np.ndarray, nx: int, ny: int) -> np.ndarray:
     h, w = a.shape
     ys = np.linspace(0, h, ny + 1).astype(int)
     xs = np.linspace(0, w, nx + 1).astype(int)
-    return np.array([a[ys[j]:ys[j + 1], xs[i]:xs[i + 1]].mean() for j in range(ny) for i in range(nx)])
+    return np.array([a[ys[j] : ys[j + 1], xs[i] : xs[i + 1]].mean() for j in range(ny) for i in range(nx)])
 
 
 def to_hsv(rgb: np.ndarray, method: str = "skimage") -> np.ndarray:
-    """RGB uint8 -> HSV float64 in [0, 1] with the chosen implementation."""
+    """Convert RGB to HSV with the chosen implementation.
+
+    Args:
+        rgb: (H, W, 3) uint8 array.
+        method: ``"skimage"`` (float64 reference) or ``"pil"`` (8-bit
+            conversion in C, within one 8-bit step of the reference).
+
+    Returns:
+        (H, W, 3) float64 array of hue, saturation and value, each in [0, 1].
+
+    Raises:
+        ValueError: For an unknown method.
+    """
     if method == "skimage":
         return rgb2hsv(rgb)
     if method == "pil":
@@ -129,16 +164,33 @@ def hsv_histogram(hsv: np.ndarray, bins: tuple[int, int, int] = (8, 4, 4)) -> np
     which gives the same counts as ``np.histogramdd`` with
     ``range=((0, 1),) * 3`` (a value of exactly 1.0 goes in the last bin) but
     avoids its per-dimension sorting.
+
+    Args:
+        hsv: (H, W, 3) array with channels in [0, 1].
+        bins: Number of bins for hue, saturation and value.
+
+    Returns:
+        Flattened histogram of length ``prod(bins)`` that sums to 1.
     """
     flat = np.zeros(hsv.shape[:2], dtype=np.int64)
     for i, b in enumerate(bins):
+        # Mixed-radix index, bin = (h_bin * 4 + s_bin) * 4 + v_bin for 8 x 4 x 4 bins.
+        # np.minimum puts a value of exactly 1.0 in the last bin, as histogramdd does.
         flat = flat * b + np.minimum((hsv[..., i] * b).astype(np.int64), b - 1)
     hist = np.bincount(flat.ravel(), minlength=int(np.prod(bins))).astype(np.float64)
     return hist / hist.sum()
 
 
 def meat_mask(hsv: np.ndarray) -> np.ndarray:
-    """Boolean mask of meat-coloured pixels (red to pink, saturated, not dark)."""
+    """Mask of meat-coloured pixels: red to pink, saturated and not dark.
+
+    Args:
+        hsv: (H, W, 3) array with channels in [0, 1].
+
+    Returns:
+        (H, W) boolean array, True where the hue is within 0.07 of red (on
+        either side of the wrap-around), saturation > 0.25 and value > 0.25.
+    """
     h, s, v = hsv[..., 0], hsv[..., 1], hsv[..., 2]
     return ((h < 0.07) | (h > 0.93)) & (s > 0.25) & (v > 0.25)
 
@@ -160,6 +212,7 @@ def extract(rgb: np.ndarray, cfg: FeatureConfig = FeatureConfig()) -> np.ndarray
         raise ValueError(f"expected an (H, W, 3) RGB array, got shape {rgb.shape}")
     small = resize(rgb, cfg.work_size, cfg.interpolation)
     hsv = to_hsv(small, cfg.hsv)
+    # ITU-R BT.601 luma weights.
     grey = small.astype(np.float64) @ np.array([0.299, 0.587, 0.114]) / 255.0
     parts: list[np.ndarray] = []
     for g in cfg.groups:
@@ -170,12 +223,14 @@ def extract(rgb: np.ndarray, cfg: FeatureConfig = FeatureConfig()) -> np.ndarray
             frac = m.mean()
             if m.any():
                 yy, xx = np.nonzero(m)
+                # Normalise by the frame size so the values do not depend on work_size.
                 cx, cy = xx.mean() / m.shape[1], yy.mean() / m.shape[0]
                 sx, sy = xx.std() / m.shape[1], yy.std() / m.shape[0]
             else:
                 cx = cy = sx = sy = 0.0
             parts.append(np.array([frac, cx, cy, sx, sy]))
         elif g == "glare":
+            # Bright and unsaturated pixels are specular reflections off the lidding film.
             glare = (hsv[..., 2] > 0.85) & (hsv[..., 1] < 0.2)
             parts.append(_grid_mean(glare.astype(float), 4, 3))
         elif g == "edges":
@@ -185,16 +240,36 @@ def extract(rgb: np.ndarray, cfg: FeatureConfig = FeatureConfig()) -> np.ndarray
             hist, _ = np.histogram(lbp, bins=10, range=(0, 10))
             parts.append(hist / hist.sum())
         elif g == "hog":
-            hg = np.asarray(Image.fromarray((grey * 255).astype(np.uint8)).resize(cfg.hog_size, INTERPOLATION[cfg.interpolation]))
-            parts.append(hog(hg, orientations=9, pixels_per_cell=(16, 16), cells_per_block=(2, 2),
-                             block_norm="L2-Hys", feature_vector=True))
+            # HOG uses a fixed grey size, so its length does not depend on work_size.
+            hg = np.asarray(
+                Image.fromarray((grey * 255).astype(np.uint8)).resize(
+                    cfg.hog_size, INTERPOLATION[cfg.interpolation]
+                )
+            )
+            parts.append(
+                hog(
+                    hg,
+                    orientations=9,
+                    pixels_per_cell=(16, 16),
+                    cells_per_block=(2, 2),
+                    block_norm="L2-Hys",
+                    feature_vector=True,
+                )
+            )
         else:
             raise ValueError(f"unknown feature group {g!r}")
     return np.concatenate(parts).astype(np.float64)
 
 
 def group_slices(cfg: FeatureConfig = FeatureConfig()) -> dict[str, slice]:
-    """Column range of each feature group in the vector from `extract`."""
+    """Column range of each feature group in the vector from `extract`.
+
+    Args:
+        cfg: Feature settings.
+
+    Returns:
+        ``{group: slice}`` in the order of ``cfg.groups``.
+    """
     dummy = np.zeros((cfg.work_size[1], cfg.work_size[0], 3), dtype=np.uint8)
     out, start = {}, 0
     for g in cfg.groups:
@@ -204,8 +279,9 @@ def group_slices(cfg: FeatureConfig = FeatureConfig()) -> dict[str, slice]:
     return out
 
 
-def extract_many(paths, cfg: FeatureConfig = FeatureConfig(), n_jobs: int = -1,
-                 cache_dir: str | Path | None = None) -> np.ndarray:
+def extract_many(
+    paths, cfg: FeatureConfig = FeatureConfig(), n_jobs: int = -1, cache_dir: str | Path | None = None
+) -> np.ndarray:
     """Feature matrix for many images, optionally cached on disk.
 
     Args:
@@ -222,6 +298,7 @@ def extract_many(paths, cfg: FeatureConfig = FeatureConfig(), n_jobs: int = -1,
     paths = [str(p) for p in paths]
     cache = None
     if cache_dir is not None:
+        # The key covers the settings and the file list, so changed settings never reuse stale features.
         h = hashlib.sha1((cfg.key() + "|".join(Path(p).name for p in paths)).encode()).hexdigest()[:16]
         cache = Path(cache_dir) / f"feat_{h}.npy"
         if cache.exists():

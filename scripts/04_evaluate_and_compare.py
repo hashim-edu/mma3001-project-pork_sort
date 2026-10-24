@@ -45,11 +45,17 @@ from porksort.splits import load_split  # noqa: E402
 
 FIG = RESULTS_DIR / "figures"
 COST_RATIOS = (1, 2, 3, 5, 10, 20, 50)
-LABEL = {"majority": "Majority baseline", "colour_lr": "Colour-histogram LR", "logreg": "Logistic regression",
-         "tree": "Decision tree", "svm": "SVM (RBF)", "mlp": "MLP",
-         "yolov8n": "YOLOv8n, Ultralytics on Colab GPU",
-         "yolov8n_onnx640": "YOLOv8n, ONNX 640 px",
-         "yolov8n_onnx480": "YOLOv8n, ONNX 480 px (selected)"}
+LABEL = {
+    "majority": "Majority baseline",
+    "colour_lr": "Colour-histogram LR",
+    "logreg": "Logistic regression",
+    "tree": "Decision tree",
+    "svm": "SVM (RBF)",
+    "mlp": "MLP",
+    "yolov8n": "YOLOv8n, Ultralytics on Colab GPU",
+    "yolov8n_onnx640": "YOLOv8n, ONNX 640 px",
+    "yolov8n_onnx480": "YOLOv8n, ONNX 480 px (selected)",
+}
 #: Deployed ONNX variants: label key -> weights file. The 480 px input was selected on
 #: validation AUC and speed in scripts/05_performance.py.
 ONNX_VARIANTS = {"yolov8n_onnx640": "best_fp32.onnx", "yolov8n_onnx480": "best_fp32_480.onnx"}
@@ -76,7 +82,9 @@ def onnx_predictions(run_dir: Path, parts: dict[str, pd.DataFrame], weights: str
     return preds
 
 
-def yolo_scores(run_dir: Path, parts: dict[str, pd.DataFrame], preds: dict | None = None) -> dict[str, pd.DataFrame] | None:
+def yolo_scores(
+    run_dir: Path, parts: dict[str, pd.DataFrame], preds: dict | None = None
+) -> dict[str, pd.DataFrame] | None:
     """Frame scores (max defect confidence per frame) from saved predictions.
 
     Defaults to the Ultralytics predictions made on Colab; pass ``preds`` for
@@ -108,17 +116,26 @@ def evaluate_scores(val: pd.DataFrame, test: pd.DataFrame, test_classes: pd.Seri
     for r in COST_RATIOS:
         t, _ = choose_threshold(val["y_fail"], val["score"], r)
         mm = passfail_metrics(test["y_fail"], test["score"], t, r)
-        sweep.append({"cost_ratio": r, "threshold": t, "escape_rate": mm["escape_rate"]["value"],
-                      "false_reject_rate": mm["false_reject_rate"]["value"], "expected_cost": mm["expected_cost"]})
+        sweep.append(
+            {
+                "cost_ratio": r,
+                "threshold": t,
+                "escape_rate": mm["escape_rate"]["value"],
+                "false_reject_rate": mm["false_reject_rate"]["value"],
+                "expected_cost": mm["expected_cost"],
+            }
+        )
     per_class = {}
     is_pass = test["y_fail"].to_numpy() == 0
     for c in CLASS_NAMES:
         has = test_classes.str.contains(c).to_numpy()
         if has.sum() >= 2 and is_pass.sum() >= 2:
             sel = is_pass | has
-            per_class[c] = {"n": int(has.sum()),
-                            "auc_vs_pass": float(roc_auc_score(has[sel], test["score"].to_numpy()[sel])),
-                            "frame_recall_at_thr": float((test["score"].to_numpy()[has] >= thr).mean())}
+            per_class[c] = {
+                "n": int(has.sum()),
+                "auc_vs_pass": float(roc_auc_score(has[sel], test["score"].to_numpy()[sel])),
+                "frame_recall_at_thr": float((test["score"].to_numpy()[has] >= thr).mean()),
+            }
     return {"threshold": thr, "test": m, "cost_sweep": sweep, "per_class": per_class}
 
 
@@ -159,14 +176,20 @@ def verify_onnx(run_dir: Path, parts: dict, preds: dict, n: int = 60) -> dict:
             d16.append(abs(s16 - s32))
             flips16 += (s16 >= thr) != (s32 >= thr)
     out["onnx_vs_ultralytics"] = {
-        "frames": len(imgs), "frame_score_abs_diff_max": float(np.max(d_score)),
+        "frames": len(imgs),
+        "frame_score_abs_diff_max": float(np.max(d_score)),
         "frame_score_abs_diff_mean": float(np.mean(d_score)),
-        "ultralytics_boxes_conf_ge_0.25": n_ul, "matched_iou_ge_0.9": int(n_match),
+        "ultralytics_boxes_conf_ge_0.25": n_ul,
+        "matched_iou_ge_0.9": int(n_match),
         "matched_iou_median": float(np.median(matched_iou)) if matched_iou else None,
     }
     if det16 is not None:
-        out["fp16_vs_fp32"] = {"frames": len(imgs), "score_abs_diff_max": float(np.max(d16)),
-                               "score_abs_diff_mean": float(np.mean(d16)), "decision_flips": int(flips16)}
+        out["fp16_vs_fp32"] = {
+            "frames": len(imgs),
+            "score_abs_diff_max": float(np.max(d16)),
+            "score_abs_diff_mean": float(np.mean(d16)),
+            "decision_flips": int(flips16),
+        }
     return out
 
 
@@ -192,17 +215,31 @@ def main() -> None:
             if op is not None:
                 scores[key] = yolo_scores(run, parts, op)
         for name, sc in scores.items():
-            assert (sc["test"]["image"].to_numpy() == parts["test"]["image"].map(lambda p: Path(p).name).to_numpy()).all()
+            assert (
+                sc["test"]["image"].to_numpy()
+                == parts["test"]["image"].map(lambda p: Path(p).name).to_numpy()
+            ).all()
             res = evaluate_scores(sc["val"], sc["test"], parts["test"]["classes"])
             all_results[f"{split}/{name}"] = res
             t = res["test"]
-            rows.append({"split": split, "model": LABEL[name], "test_n": t["n"], "test_pass_n": t["n_pass"],
-                         "roc_auc": t["roc_auc"], "auc_ci_lo": t.get("roc_auc_ci95", [np.nan] * 2)[0],
-                         "auc_ci_hi": t.get("roc_auc_ci95", [np.nan] * 2)[1],
-                         "avg_precision": t["average_precision"], "threshold": res["threshold"],
-                         "escape_rate": t["escape_rate"]["value"], "escape_ci_hi": t["escape_rate"]["ci95"][1],
-                         "false_reject_rate": t["false_reject_rate"]["value"],
-                         "balanced_accuracy": t["balanced_accuracy"], "expected_cost": t["expected_cost"]})
+            rows.append(
+                {
+                    "split": split,
+                    "model": LABEL[name],
+                    "test_n": t["n"],
+                    "test_pass_n": t["n_pass"],
+                    "roc_auc": t["roc_auc"],
+                    "auc_ci_lo": t.get("roc_auc_ci95", [np.nan] * 2)[0],
+                    "auc_ci_hi": t.get("roc_auc_ci95", [np.nan] * 2)[1],
+                    "avg_precision": t["average_precision"],
+                    "threshold": res["threshold"],
+                    "escape_rate": t["escape_rate"]["value"],
+                    "escape_ci_hi": t["escape_rate"]["ci95"][1],
+                    "false_reject_rate": t["false_reject_rate"]["value"],
+                    "balanced_accuracy": t["balanced_accuracy"],
+                    "expected_cost": t["expected_cost"],
+                }
+            )
             if split == "blocked":
                 roc_data[name] = roc_curve(sc["test"]["y_fail"], sc["test"]["score"])
             if name in ONNX_VARIANTS:
@@ -222,7 +259,9 @@ def main() -> None:
     for c in fmt.columns:
         if fmt[c].dtype == float:
             fmt[c] = fmt[c].map(lambda v: f"{v:.3f}")
-    (RESULTS_DIR / "comparison.md").write_text(fmt.to_markdown(index=False) if hasattr(fmt, "to_markdown") else fmt.to_string())
+    (RESULTS_DIR / "comparison.md").write_text(
+        fmt.to_markdown(index=False) if hasattr(fmt, "to_markdown") else fmt.to_string()
+    )
     (RESULTS_DIR / "comparison_details.json").write_text(json.dumps(all_results, indent=1, default=float))
     if verification:
         (RESULTS_DIR / "yolo_verification.json").write_text(json.dumps(verification, indent=1))
@@ -233,10 +272,17 @@ def main() -> None:
     aucs = table[(table.split == "blocked") & table.model.isin([LABEL[k] for k in classical])]["roc_auc"]
     for i, name in enumerate(classical):
         fpr, tpr, _ = roc_data[name]
-        ax.plot(fpr, tpr, color="0.7", lw=1,
-                label=f"classical models (AUC {aucs.min():.2f} to {aucs.max():.2f})" if i == 0 else None)
-    for name, style in (("yolov8n_onnx640", dict(color="0.35", lw=1.3, ls="--")),
-                        (SELECTED, dict(color="C0", lw=2.2))):
+        ax.plot(
+            fpr,
+            tpr,
+            color="0.7",
+            lw=1,
+            label=f"classical models (AUC {aucs.min():.2f} to {aucs.max():.2f})" if i == 0 else None,
+        )
+    for name, style in (
+        ("yolov8n_onnx640", dict(color="0.35", lw=1.3, ls="--")),
+        (SELECTED, dict(color="C0", lw=2.2)),
+    ):
         if name in roc_data:
             fpr, tpr, _ = roc_data[name]
             auc = table[(table.split == "blocked") & (table.model == LABEL[name])]["roc_auc"].iloc[0]
@@ -269,8 +315,11 @@ def main() -> None:
         plt.close(fig)
 
     # Cost-ratio sensitivity for the best blocked model
-    key = SELECTED if f"blocked/{SELECTED}" in all_results else table[table.split == "blocked"].sort_values(
-        "roc_auc", ascending=False).iloc[0]["model"]
+    key = (
+        SELECTED
+        if f"blocked/{SELECTED}" in all_results
+        else table[table.split == "blocked"].sort_values("roc_auc", ascending=False).iloc[0]["model"]
+    )
     best = {"model": LABEL.get(key, key)}
     sw = pd.DataFrame(all_results[f"blocked/{key}"]["cost_sweep"])
     fig, ax = plt.subplots(figsize=(5.5, 3.2))
@@ -290,8 +339,11 @@ def main() -> None:
         df_b = load_split(index, "blocked")
         te = df_b[df_b.split == "test"]
         run = RESULTS_DIR / "yolo" / "yolov8n_blocked"
-        sel = yolo_scores(run, {"val": df_b[df_b.split == "val"], "test": te},
-                          json.loads((run / f"predictions_{Path(ONNX_VARIANTS[SELECTED]).stem}.json").read_text()))["test"]
+        sel = yolo_scores(
+            run,
+            {"val": df_b[df_b.split == "val"], "test": te},
+            json.loads((run / f"predictions_{Path(ONNX_VARIANTS[SELECTED]).stem}.json").read_text()),
+        )["test"]
         lr = pd.read_csv(RESULTS_DIR / "classical" / "blocked" / "logreg_test_scores.csv")
         y, a, b = sel["y_fail"].to_numpy(), sel["score"].to_numpy(), lr["score"].to_numpy()
         rng = np.random.default_rng(0)
@@ -300,14 +352,31 @@ def main() -> None:
             i = rng.integers(0, len(y), len(y))
             if 0 < y[i].sum() < len(i):
                 diffs.append(roc_auc_score(y[i], a[i]) - roc_auc_score(y[i], b[i]))
-        paired = {"auc_difference": float(roc_auc_score(y, a) - roc_auc_score(y, b)),
-                  "ci95": [float(np.percentile(diffs, 2.5)), float(np.percentile(diffs, 97.5))],
-                  "share_of_resamples_le_0": float(np.mean(np.array(diffs) <= 0))}
+        paired = {
+            "auc_difference": float(roc_auc_score(y, a) - roc_auc_score(y, b)),
+            "ci95": [float(np.percentile(diffs, 2.5)), float(np.percentile(diffs, 97.5))],
+            "share_of_resamples_le_0": float(np.mean(np.array(diffs) <= 0)),
+        }
         (RESULTS_DIR / "paired_auc_selected_vs_logreg.json").write_text(json.dumps(paired, indent=1))
         print("paired AUC difference (selected YOLO - LR):", paired)
 
-    print(table[["split", "model", "roc_auc", "auc_ci_lo", "auc_ci_hi", "threshold", "escape_rate",
-                 "false_reject_rate", "expected_cost"]].round(3).to_string(index=False))
+    print(
+        table[
+            [
+                "split",
+                "model",
+                "roc_auc",
+                "auc_ci_lo",
+                "auc_ci_hi",
+                "threshold",
+                "escape_rate",
+                "false_reject_rate",
+                "expected_cost",
+            ]
+        ]
+        .round(3)
+        .to_string(index=False)
+    )
     if verification:
         print(json.dumps(verification, indent=1))
 

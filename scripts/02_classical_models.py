@@ -38,7 +38,7 @@ from porksort.config import DEFAULT_COST_RATIO, RESULTS_DIR  # noqa: E402
 from porksort.dataset import build_index  # noqa: E402
 from porksort.decision import choose_threshold  # noqa: E402
 from porksort.evaluate import bootstrap_auc, passfail_metrics  # noqa: E402
-from porksort.features import FeatureConfig, extract_many, group_slices, load_rgb, extract  # noqa: E402
+from porksort.features import FeatureConfig, extract, extract_many, group_slices, load_rgb  # noqa: E402
 from porksort.models import MODEL_NAMES, defect_score, make_model  # noqa: E402
 from porksort.splits import load_split  # noqa: E402
 
@@ -94,8 +94,13 @@ def main() -> None:
         X = {s: X_all[[row_of[p] for p in d["image"]]] for s, d in parts.items()}
         y = {s: d["fail"].to_numpy().astype(int) for s, d in parts.items()}
         groups = parts["train"]["block"].to_numpy()
-        summary = {"split": split_name, "feature_config": cfg.__dict__, "feature_ms_per_frame": feat_ms,
-                   "n": {s: int(len(d)) for s, d in parts.items()}, "models": {}}
+        summary = {
+            "split": split_name,
+            "feature_config": cfg.__dict__,
+            "feature_ms_per_frame": feat_ms,
+            "n": {s: int(len(d)) for s, d in parts.items()},
+            "models": {},
+        }
 
         for name in args.models:
             pipe, grid = make_model(name, colour_slice=colour)
@@ -108,7 +113,10 @@ def main() -> None:
                     gs.fit(X["train"], y["train"], groups=groups)
                     model, best = gs.best_estimator_, gs.best_params_
                     i = gs.best_index_
-                    cv_auc = (float(gs.cv_results_["mean_test_score"][i]), float(gs.cv_results_["std_test_score"][i]))
+                    cv_auc = (
+                        float(gs.cv_results_["mean_test_score"][i]),
+                        float(gs.cv_results_["std_test_score"][i]),
+                    )
                 else:
                     model, best, cv_auc = pipe.fit(X["train"], y["train"]), {}, (0.5, 0.0)
             fit_s = time.perf_counter() - t0
@@ -119,7 +127,9 @@ def main() -> None:
             thr, val_cost = choose_threshold(y["val"], s_val, args.cost_ratio)
             m_val = passfail_metrics(y["val"], s_val, thr, args.cost_ratio)
             m_test = passfail_metrics(y["test"], s_test, thr, args.cost_ratio)
-            m_test["roc_auc_ci95"] = list(bootstrap_auc(y["test"], s_test)) if name != "majority" else [0.5, 0.5]
+            m_test["roc_auc_ci95"] = (
+                list(bootstrap_auc(y["test"], s_test)) if name != "majority" else [0.5, 0.5]
+            )
 
             clf = model[-1]
             extra = {}
@@ -134,20 +144,36 @@ def main() -> None:
 
             summary["models"][name] = {
                 "best_params": {k: (list(v) if isinstance(v, tuple) else v) for k, v in best.items()},
-                "cv_roc_auc_mean_std": cv_auc, "fit_seconds_incl_search": fit_s,
-                "convergence_warnings": n_conv_warn, "threshold": thr,
-                "val": m_val, "test": m_test,
+                "cv_roc_auc_mean_std": cv_auc,
+                "fit_seconds_incl_search": fit_s,
+                "convergence_warnings": n_conv_warn,
+                "threshold": thr,
+                "val": m_val,
+                "test": m_test,
                 "predict_ms_per_frame": time_inference(model, X["test"][:1]),
                 **extra,
             }
-            pd.DataFrame({"image": parts["val"]["image"].map(lambda p: Path(p).name), "y_fail": y["val"],
-                          "score": s_val}).to_csv(out_dir / f"{name}_val_scores.csv", index=False)
-            pd.DataFrame({"image": parts["test"]["image"].map(lambda p: Path(p).name), "y_fail": y["test"],
-                          "score": s_test}).to_csv(out_dir / f"{name}_test_scores.csv", index=False)
-            print(f"[{split_name}] {name:9s} cv_auc={cv_auc[0]:.3f}±{cv_auc[1]:.3f} "
-                  f"test_auc={m_test['roc_auc']:.3f} thr={thr:.3f} "
-                  f"escape={m_test['escape_rate']['value']:.3f} false_reject={m_test['false_reject_rate']['value']:.3f} "
-                  f"fit={fit_s:.1f}s {best}")
+            pd.DataFrame(
+                {
+                    "image": parts["val"]["image"].map(lambda p: Path(p).name),
+                    "y_fail": y["val"],
+                    "score": s_val,
+                }
+            ).to_csv(out_dir / f"{name}_val_scores.csv", index=False)
+            pd.DataFrame(
+                {
+                    "image": parts["test"]["image"].map(lambda p: Path(p).name),
+                    "y_fail": y["test"],
+                    "score": s_test,
+                }
+            ).to_csv(out_dir / f"{name}_test_scores.csv", index=False)
+            print(
+                f"[{split_name}] {name:9s} cv_auc={cv_auc[0]:.3f}±{cv_auc[1]:.3f} "
+                f"test_auc={m_test['roc_auc']:.3f} thr={thr:.3f} "
+                f"escape={m_test['escape_rate']['value']:.3f} "
+                f"false_reject={m_test['false_reject_rate']['value']:.3f} "
+                f"fit={fit_s:.1f}s {best}"
+            )
 
         (out_dir / "summary.json").write_text(json.dumps(summary, indent=1))
 

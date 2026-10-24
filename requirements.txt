@@ -12,6 +12,7 @@ pytest>=7
 pytest-html>=4
 pdoc>=14
 line_profiler>=4
+ruff>=0.6
 
 # YOLO training runs on Google Colab (see notebooks/03_train_yolo_colab.ipynb):
 # ultralytics>=8.3,<9

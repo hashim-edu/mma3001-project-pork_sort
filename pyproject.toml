@@ -21,7 +21,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=7", "pytest-html>=4", "pdoc>=14", "line_profiler>=4"]
+dev = ["pytest>=7", "pytest-html>=4", "pdoc>=14", "line_profiler>=4", "ruff>=0.6"]
 train = ["ultralytics>=8.3,<9"]
 
 [project.scripts]
@@ -33,3 +33,23 @@ where = ["src"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
+
+[tool.ruff]
+line-length = 110
+target-version = "py310"
+src = ["src", "tests", "scripts"]
+
+[tool.ruff.lint]
+# pycodestyle, pyflakes, import order, bugbear, pyupgrade, and Google-style docstrings for the package
+select = ["E", "W", "F", "I", "B", "UP", "D"]
+ignore = [
+    "B008",  # frozen config dataclasses are safe as argument defaults
+    "D107",  # Google style: constructor arguments are documented in the class docstring
+]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["D"]
+"scripts/*" = ["D103"]

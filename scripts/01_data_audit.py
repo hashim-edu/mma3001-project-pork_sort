@@ -66,7 +66,7 @@ def similarity_vs_gap(src, max_gap=120, n_random=2000, seed=0):
     rng = np.random.default_rng(seed)
     a, b = rng.integers(0, len(frames), (2, n_random))
     far = np.abs(frames[a] - frames[b]) > 1000
-    rand = np.array([float(T[i] @ T[j]) / T.shape[1] for i, j in zip(a[far], b[far])])
+    rand = np.array([float(T[i] @ T[j]) / T.shape[1] for i, j in zip(a[far], b[far], strict=True)])
     with np.errstate(invalid="ignore"):
         mean = sums / counts
     return mean, counts, float(rand.mean()), float(rand.std())
@@ -90,7 +90,9 @@ def main() -> None:
             "boxes_per_class": {c: int(g[f"n_{c}"].sum()) for c in CLASS_NAMES},
         }
     out["rf_splits"] = per_split
-    out["copies_per_source"] = {int(k): int(v) for k, v in idx.groupby("source").size().value_counts().items()}
+    out["copies_per_source"] = {
+        int(k): int(v) for k, v in idx.groupby("source").size().value_counts().items()
+    }
     out["sources_in_multiple_rf_splits"] = int((idx.groupby("source")["rf_split"].nunique() > 1).sum())
 
     # Box sizes per class (fraction of image area), from source frames only
@@ -99,8 +101,14 @@ def main() -> None:
         for b in parse_label_file(lbl):
             areas[b.cls].append(b.area)
     out["box_area_frac"] = {
-        c: {"n": len(v), "median": float(np.median(v)), "p10": float(np.percentile(v, 10)),
-            "p90": float(np.percentile(v, 90))} for c, v in areas.items() if v
+        c: {
+            "n": len(v),
+            "median": float(np.median(v)),
+            "p10": float(np.percentile(v, 10)),
+            "p90": float(np.percentile(v, 90)),
+        }
+        for c, v in areas.items()
+        if v
     }
 
     # Leakage of the Roboflow split
@@ -120,7 +128,7 @@ def main() -> None:
     period = float(1.0 / freqs[k])
     out["similarity_random_pairs"] = {"mean": r_mu, "std": r_sd}
     out["tray_pitch_frames_fft"] = period
-    out["similarity_by_gap"] = {int(a): float(b) for a, b in zip(g, m)}
+    out["similarity_by_gap"] = {int(a): float(b) for a, b in zip(g, m, strict=True)}
     fig, ax = plt.subplots(figsize=(6, 3.2))
     ax.plot(g, m, ".-", lw=1, label="mean correlation of pairs at this gap")
     ax.axhline(r_mu, color="0.5", lw=1, label="mean of random far-apart pairs")
@@ -142,9 +150,13 @@ def main() -> None:
     out["blocked_config"] = cfg.__dict__
     out["blocked_sources_buffered"] = int((assign["split"] == "buffer").sum())
     out["blocked_splits"] = {
-        s: {"images": int(len(g)), "sources": int(g["source"].nunique()),
-            "pass_images": int((~g["fail"]).sum()), "fail_images": int(g["fail"].sum()),
-            "images_with_class": {c: int((g[f"n_{c}"] > 0).sum()) for c in CLASS_NAMES}}
+        s: {
+            "images": int(len(g)),
+            "sources": int(g["source"].nunique()),
+            "pass_images": int((~g["fail"]).sum()),
+            "fail_images": int(g["fail"].sum()),
+            "images_with_class": {c: int((g[f"n_{c}"] > 0).sum()) for c in CLASS_NAMES},
+        }
         for s, g in bl.groupby("split")
     }
     out["leakage_blocked"] = leakage_report(bl)
@@ -154,8 +166,10 @@ def main() -> None:
         tr = np.sort(df.loc[df.split == "train", "frame"].dropna().unique())
         te = df.loc[df.split == "test", "frame"].dropna().unique()
         pos = np.searchsorted(tr, te)
-        return np.minimum(np.abs(te - tr[np.clip(pos - 1, 0, len(tr) - 1)]),
-                          np.abs(te - tr[np.clip(pos, 0, len(tr) - 1)]))
+        return np.minimum(
+            np.abs(te - tr[np.clip(pos - 1, 0, len(tr) - 1)]), np.abs(te - tr[np.clip(pos, 0, len(tr) - 1)])
+        )
+
     fig, ax = plt.subplots(figsize=(6, 3.2))
     bins = np.arange(0, 120, 4)
     ax.hist(np.clip(nearest(rf), 0, 118), bins=bins, alpha=0.7, label="Roboflow test split")
@@ -174,7 +188,9 @@ def main() -> None:
     width = 0.27
     for k, s in enumerate(["train", "valid", "test"]):
         d = per_split[s]
-        vals = [d["pass_images"] / d["images"]] + [d["images_with_class"][c] / d["images"] for c in CLASS_NAMES]
+        vals = [d["pass_images"] / d["images"]] + [
+            d["images_with_class"][c] / d["images"] for c in CLASS_NAMES
+        ]
         ax.bar(np.arange(len(labels)) + (k - 1) * width, vals, width, label=f"{s} (n={d['images']})")
     ax.set_xticks(np.arange(len(labels)), labels, rotation=20, fontsize=8)
     ax.set_ylabel("fraction of images")
@@ -185,8 +201,15 @@ def main() -> None:
     plt.close(fig)
 
     (RESULTS_DIR / "data_audit.json").write_text(json.dumps(out, indent=2))
-    print(json.dumps({k: out[k] for k in ("leakage_roboflow", "leakage_blocked", "blocked_splits",
-                                          "tray_pitch_frames_fft")}, indent=1))
+    print(
+        json.dumps(
+            {
+                k: out[k]
+                for k in ("leakage_roboflow", "leakage_blocked", "blocked_splits", "tray_pitch_frames_fft")
+            },
+            indent=1,
+        )
+    )
 
 
 if __name__ == "__main__":

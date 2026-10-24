@@ -38,9 +38,13 @@ def wilson_ci(k: int, n: int, z: float = 1.959963984540054) -> tuple[float, floa
     Returns:
         ``(lower, upper)``; ``(0.0, 1.0)`` when ``n == 0``.
 
-    >>> lo, hi = wilson_ci(0, 10)
-    >>> round(lo, 3), round(hi, 3)
-    (0.0, 0.278)
+    Raises:
+        ValueError: If ``k`` is outside [0, n].
+
+    Examples:
+        >>> lo, hi = wilson_ci(0, 10)
+        >>> round(lo, 3), round(hi, 3)
+        (0.0, 0.278)
     """
     if n == 0:
         return 0.0, 1.0
@@ -48,19 +52,36 @@ def wilson_ci(k: int, n: int, z: float = 1.959963984540054) -> tuple[float, floa
         raise ValueError(f"need 0 <= k <= n, got k={k}, n={n}")
     p = k / n
     denom = 1 + z * z / n
+    # The centre is pulled towards 0.5 and the half-width stays positive at p = 0 or 1,
+    # which is what the normal approximation gets wrong.
     centre = (p + z * z / (2 * n)) / denom
     half = z * math.sqrt(p * (1 - p) / n + z * z / (4 * n * n)) / denom
     return max(0.0, centre - half), min(1.0, centre + half)
 
 
 def confusion(y_fail, pred_fail) -> dict[str, int]:
-    """Confusion counts with FAIL as positive: ``tp``, ``fn``, ``fp``, ``tn``."""
+    """Confusion counts with FAIL as the positive class.
+
+    Args:
+        y_fail: True labels, True = defective frame.
+        pred_fail: Predicted labels, True = FAIL.
+
+    Returns:
+        Counts ``tp``, ``fn``, ``fp`` and ``tn``.
+
+    Raises:
+        ValueError: If the two arrays have different shapes.
+    """
     y = np.asarray(y_fail, dtype=bool)
     p = np.asarray(pred_fail, dtype=bool)
     if y.shape != p.shape:
         raise ValueError("y_fail and pred_fail must have the same shape")
-    return {"tp": int(np.sum(y & p)), "fn": int(np.sum(y & ~p)),
-            "fp": int(np.sum(~y & p)), "tn": int(np.sum(~y & ~p))}
+    return {
+        "tp": int(np.sum(y & p)),
+        "fn": int(np.sum(y & ~p)),
+        "fp": int(np.sum(~y & p)),
+        "tn": int(np.sum(~y & ~p)),
+    }
 
 
 def _rate(k: int, n: int) -> dict:
@@ -87,8 +108,11 @@ def passfail_metrics(y_fail, scores, threshold: float, cost_ratio: float) -> dic
     c = confusion(y, s >= threshold)
     tp, fn, fp, tn = c["tp"], c["fn"], c["fp"], c["tn"]
     out = {
-        "n": int(len(y)), "n_fail": int(y.sum()), "n_pass": int((~y).sum()),
-        "threshold": float(threshold), "confusion": c,
+        "n": int(len(y)),
+        "n_fail": int(y.sum()),
+        "n_pass": int((~y).sum()),
+        "threshold": float(threshold),
+        "confusion": c,
         "escape_rate": _rate(fn, tp + fn),
         "false_reject_rate": _rate(fp, fp + tn),
         "fail_recall": _rate(tp, tp + fn),
@@ -99,6 +123,7 @@ def passfail_metrics(y_fail, scores, threshold: float, cost_ratio: float) -> dic
         "cost_ratio": float(cost_ratio),
     }
     out["balanced_accuracy"] = 0.5 * (out["fail_recall"]["value"] + out["pass_recall"]["value"])
+    # ROC AUC is undefined when only one class is present.
     if 0 < y.sum() < len(y):
         out["roc_auc"] = float(roc_auc_score(y, s))
         out["average_precision"] = float(average_precision_score(y, s))
@@ -108,13 +133,30 @@ def passfail_metrics(y_fail, scores, threshold: float, cost_ratio: float) -> dic
 
 
 def bootstrap_auc(y_fail, scores, n_boot: int = 2000, seed: int = 0) -> tuple[float, float]:
-    """Percentile bootstrap 95 % interval for ROC AUC (resampling frames)."""
+    """Percentile bootstrap 95 % interval for ROC AUC.
+
+    Frames are resampled with replacement ``n_boot`` times and the AUC is
+    recomputed on each resample; resamples that contain only one class are
+    skipped.
+
+    Args:
+        y_fail: True labels, True = defective frame.
+        scores: Defect scores, one per frame.
+        n_boot: Number of resamples.
+        seed: Seed for the random number generator, so the interval repeats.
+
+    Returns:
+        ``(lower, upper)``: the 2.5th and 97.5th percentiles of the resampled
+        AUCs.
+    """
     y = np.asarray(y_fail, dtype=bool)
     s = np.asarray(scores, dtype=float)
     rng = np.random.default_rng(seed)
     aucs = []
     for _ in range(n_boot):
+        # Resample frames with replacement.
         i = rng.integers(0, len(y), len(y))
+        # Skip resamples that contain a single class (AUC undefined).
         if 0 < y[i].sum() < len(i):
             aucs.append(roc_auc_score(y[i], s[i]))
     return float(np.percentile(aucs, 2.5)), float(np.percentile(aucs, 97.5))

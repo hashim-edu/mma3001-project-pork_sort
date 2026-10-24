@@ -55,7 +55,15 @@ class Box:
         return self.w * self.h
 
     def to_pixels(self, width: int, height: int) -> tuple[float, float, float, float]:
-        """Return ``(x0, y0, x1, y1)`` corner coordinates in pixels."""
+        """Convert to corner coordinates in pixels.
+
+        Args:
+            width: Image width in pixels.
+            height: Image height in pixels.
+
+        Returns:
+            ``(x0, y0, x1, y1)``: the top-left and bottom-right corners in pixels.
+        """
         return (
             (self.xc - self.w / 2) * width,
             (self.yc - self.h / 2) * height,
@@ -83,6 +91,7 @@ def parse_label_file(path: str | os.PathLike) -> list[Box]:
     text = Path(path).read_text()
     for lineno, line in enumerate(text.splitlines(), start=1):
         parts = line.split()
+        # Blank lines are allowed; some export tools end the file with one.
         if not parts:
             continue
         if len(parts) != 5:
@@ -92,6 +101,8 @@ def parse_label_file(path: str | os.PathLike) -> list[Box]:
             xc, yc, w, h = (float(p) for p in parts[1:])
         except ValueError as exc:
             raise ValueError(f"{path}:{lineno}: non-numeric field") from exc
+        # Validate here, so a bad annotation fails loudly with its file and line
+        # instead of silently becoming a wrong label later.
         if not 0 <= cid < len(CLASS_NAMES):
             raise ValueError(f"{path}:{lineno}: unknown class id {cid}")
         for name, v in (("xc", xc), ("yc", yc), ("w", w), ("h", h)):
@@ -104,10 +115,17 @@ def parse_label_file(path: str | os.PathLike) -> list[Box]:
 def source_id(filename: str) -> str:
     """Return the source-frame name shared by all augmented copies.
 
-    >>> source_id("frame_with_red_10049_jpg.rf.cd786c4f.jpg")
-    'frame_with_red_10049_jpg'
-    >>> source_id("my_photo.jpg")
-    'my_photo'
+    Args:
+        filename: Image file name or path.
+
+    Returns:
+        The part before ``.rf.`` for a Roboflow copy, otherwise the file stem.
+
+    Examples:
+        >>> source_id("frame_with_red_10049_jpg.rf.cd786c4f.jpg")
+        'frame_with_red_10049_jpg'
+        >>> source_id("my_photo.jpg")
+        'my_photo'
     """
     stem = Path(filename).name
     if ".rf." in stem:
@@ -116,19 +134,34 @@ def source_id(filename: str) -> str:
 
 
 def frame_number(source: str) -> int | None:
-    """Extract the video frame number from a source name, or None.
+    """Extract the video frame number from a source name.
 
-    >>> frame_number("frame_with_red_10049_jpg")
-    10049
-    >>> frame_number("other") is None
-    True
+    Args:
+        source: Source-frame name from `source_id`.
+
+    Returns:
+        The frame number, or None if the name does not follow the export's
+        ``frame_with_red_<n>_jpg`` pattern.
+
+    Examples:
+        >>> frame_number("frame_with_red_10049_jpg")
+        10049
+        >>> frame_number("other") is None
+        True
     """
     m = _FRAME_RE.search(source)
     return int(m.group(1)) if m else None
 
 
 def is_fail(boxes: list[Box]) -> bool:
-    """Ground-truth frame label: True (FAIL) if any box is a defect class."""
+    """Ground-truth label of one frame.
+
+    Args:
+        boxes: Annotated boxes of the frame.
+
+    Returns:
+        True (FAIL) if any box is a defect class, False (PASS) otherwise.
+    """
     return any(b.cls in DEFECT_CLASSES for b in boxes)
 
 
@@ -160,6 +193,7 @@ def build_index(root: str | os.PathLike | None = None) -> pd.DataFrame:
             continue
         found_any = True
         for img in sorted(img_dir.iterdir()):
+            # Skip hidden files such as macOS ._frame.jpg metadata.
             if img.name.startswith("."):
                 continue
             lbl = lbl_dir / (img.stem + ".txt")
@@ -182,14 +216,21 @@ def build_index(root: str | os.PathLike | None = None) -> pd.DataFrame:
             rows.append(row)
     if not found_any:
         raise FileNotFoundError(
-            f"no train/valid/test folders under {root}. Unzip the Roboflow "
-            "export there or set PORKSORT_DATA."
+            f"no train/valid/test folders under {root}. Unzip the Roboflow export there or set PORKSORT_DATA."
         )
     df = pd.DataFrame(rows)
+    # Number the augmented copies of each source frame 0, 1, 2 ...; evaluation keeps copy 0 only.
     df["copy"] = df.groupby("source").cumcount()
     return df
 
 
 def unique_sources(index: pd.DataFrame) -> pd.DataFrame:
-    """One row per source frame (the first copy), for splitting and audits."""
+    """Keep one row per source frame, for splitting and audits.
+
+    Args:
+        index: Output of `build_index`.
+
+    Returns:
+        The first copy (by file name) of each source frame, re-indexed from 0.
+    """
     return index.sort_values(["source", "image"]).drop_duplicates("source").reset_index(drop=True)
