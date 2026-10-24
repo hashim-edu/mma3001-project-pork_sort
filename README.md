@@ -127,4 +127,6 @@ in the written report.
 
 ## Licence
 
-Code: MIT (see `LICENSE`). Data: CC BY 4.0, from the original authors.
+Code: MIT (see `LICENSE`). Data: CC BY 4.0, from the original authors. The trained model files in
+`results/yolo/` were produced with Ultralytics YOLOv8, which is licensed under AGPL-3.0; those files are
+covered by that licence.
