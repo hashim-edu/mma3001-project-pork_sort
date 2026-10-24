@@ -27,3 +27,7 @@ results/cache/
 results/yolo/**/best_fp32_320.onnx
 results/yolo/**/best_fp32_800.onnx
 results/yolo/**/train_batch*.jpg
+results/yolo/**/best_fp32.onnx
+results/yolo/**/best_fp16.onnx
+results/yolo/**/val_batch*.jpg
+results/yolo/**/labels.jpg

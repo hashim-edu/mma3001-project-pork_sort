@@ -3,7 +3,7 @@
     python scripts/06_figures.py
 
 - ``results/figures/pipeline.png``: system architecture (training and inspection).
-- ``results/figures/examples_blocked_test.png``: blocked-test frames with ground
+- ``results/figures/examples_blocked_test.jpg``: blocked-test frames with ground
   truth and YOLO detections, including the worst escapes and false rejects
   (needs the YOLO results).
 """
@@ -138,7 +138,7 @@ def examples():
                  "dashed white = ground truth, solid = detections at or above threshold",
                  fontsize=8)
     fig.tight_layout()
-    fig.savefig(FIG / "examples_blocked_test.png", dpi=140)
+    fig.savefig(FIG / "examples_blocked_test.jpg", dpi=120, pil_kwargs={"quality": 82})
     plt.close(fig)
 
 
