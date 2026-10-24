@@ -55,7 +55,7 @@ def test_higher_cost_ratio_never_raises_threshold():
     y = rng.random(400) < 0.8
     s = np.clip(rng.normal(0.4 + 0.2 * y, 0.2), 0, 1)
     ts = [choose_threshold(y, s, r)[0] for r in (1, 3, 10, 30, 100)]
-    assert all(a >= b for a, b in zip(ts, ts[1:]))
+    assert all(a >= b for a, b in zip(ts[:-1], ts[1:], strict=True))
 
 
 def test_candidates_cover_extremes():

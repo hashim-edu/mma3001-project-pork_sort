@@ -15,12 +15,15 @@ def test_parse_valid_and_empty(tmp_path):
     assert parse_label_file(tmp_path / "e.txt") == []
 
 
-@pytest.mark.parametrize("line, msg", [
-    ("1 0.5 0.5 0.2", "expected 5 fields"),
-    ("9 0.5 0.5 0.2 0.1", "unknown class id"),
-    ("1 1.5 0.5 0.2 0.1", r"outside \[0, 1\]"),
-    ("x 0.5 0.5 0.2 0.1", "non-numeric"),
-])
+@pytest.mark.parametrize(
+    "line, msg",
+    [
+        ("1 0.5 0.5 0.2", "expected 5 fields"),
+        ("9 0.5 0.5 0.2 0.1", "unknown class id"),
+        ("1 1.5 0.5 0.2 0.1", r"outside \[0, 1\]"),
+        ("x 0.5 0.5 0.2 0.1", "non-numeric"),
+    ],
+)
 def test_parse_rejects_bad_lines(tmp_path, line, msg):
     f = tmp_path / "bad.txt"
     f.write_text(line + "\n")

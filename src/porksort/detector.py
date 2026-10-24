@@ -33,7 +33,9 @@ from .config import CLASS_NAMES
 from .dataset import Box
 
 
-def letterbox(rgb: np.ndarray, size: int = 640, fill: int = 114) -> tuple[np.ndarray, float, tuple[float, float]]:
+def letterbox(
+    rgb: np.ndarray, size: int = 640, fill: int = 114
+) -> tuple[np.ndarray, float, tuple[float, float]]:
     """Resize keeping aspect ratio, then pad to a square.
 
     Args:
@@ -48,16 +50,29 @@ def letterbox(rgb: np.ndarray, size: int = 640, fill: int = 114) -> tuple[np.nda
     h, w = rgb.shape[:2]
     r = min(size / w, size / h)
     nw, nh = int(round(w * r)), int(round(h * r))
-    resized = np.asarray(Image.fromarray(rgb).resize((nw, nh), Image.Resampling.BILINEAR)) if (nw, nh) != (w, h) else rgb
+    resized = (
+        np.asarray(Image.fromarray(rgb).resize((nw, nh), Image.Resampling.BILINEAR))
+        if (nw, nh) != (w, h)
+        else rgb
+    )
     dw, dh = (size - nw) / 2, (size - nh) / 2
+    # Same rounding as Ultralytics, so the padding (and therefore the scores) match its letterbox.
     top, left = int(round(dh - 0.1)), int(round(dw - 0.1))
     out = np.full((size, size, 3), fill, dtype=np.uint8)
-    out[top:top + nh, left:left + nw] = resized
+    out[top : top + nh, left : left + nw] = resized
     return out, r, (float(left), float(top))
 
 
 def box_iou(a: np.ndarray, b: np.ndarray) -> np.ndarray:
-    """IoU between each box in ``a`` (N, 4) and each in ``b`` (M, 4), xyxy format."""
+    """Intersection over union between two sets of boxes.
+
+    Args:
+        a: (N, 4) boxes as corners ``x0, y0, x1, y1``.
+        b: (M, 4) boxes in the same format.
+
+    Returns:
+        (N, M) array of IoU values in [0, 1].
+    """
     ix0 = np.maximum(a[:, None, 0], b[None, :, 0])
     iy0 = np.maximum(a[:, None, 1], b[None, :, 1])
     ix1 = np.minimum(a[:, None, 2], b[None, :, 2])
@@ -74,6 +89,11 @@ def nms(boxes: np.ndarray, scores: np.ndarray, iou_thr: float) -> np.ndarray:
     Repeatedly keeps the highest-scoring box and removes every remaining box
     that overlaps it with IoU above ``iou_thr``.
 
+    Args:
+        boxes: (N, 4) boxes as corners ``x0, y0, x1, y1``.
+        scores: (N,) confidence of each box.
+        iou_thr: Overlap above which the lower-scoring box is removed.
+
     Returns:
         Indices of kept boxes, highest score first.
     """
@@ -84,38 +104,62 @@ def nms(boxes: np.ndarray, scores: np.ndarray, iou_thr: float) -> np.ndarray:
         keep.append(int(i))
         if order.size == 1:
             break
-        ious = box_iou(boxes[i:i + 1], boxes[order[1:]])[0]
+        ious = box_iou(boxes[i : i + 1], boxes[order[1:]])[0]
         order = order[1:][ious <= iou_thr]
     return np.array(keep, dtype=int)
 
 
-def decode(output: np.ndarray, r: float, pad: tuple[float, float], img_wh: tuple[int, int],
-           conf_thr: float, iou_thr: float, class_names=CLASS_NAMES, max_det: int = 300) -> list[Box]:
+def decode(
+    output: np.ndarray,
+    r: float,
+    pad: tuple[float, float],
+    img_wh: tuple[int, int],
+    conf_thr: float,
+    iou_thr: float,
+    class_names=CLASS_NAMES,
+    max_det: int = 300,
+) -> list[Box]:
     """Turn the raw network output into boxes in normalised image coordinates.
 
     Args:
         output: (1, 4 + n_classes, n_anchors) array; rows are cx, cy, w, h in
             letterboxed pixels followed by per-class scores in [0, 1].
-        r, pad: Scale and padding returned by `letterbox`.
-        img_wh: Original image (width, height).
+        r: Scale factor returned by `letterbox`.
+        pad: Left and top padding in pixels returned by `letterbox`.
+        img_wh: Original image (width, height) in pixels.
         conf_thr: Minimum class score to keep an anchor.
         iou_thr: IoU above which overlapping boxes of the same class are merged.
         class_names: Class names in id order.
-        max_det: Maximum boxes returned.
+        max_det: Maximum number of boxes returned.
+
+    Returns:
+        Boxes in normalised (xc, yc, w, h) coordinates of the original image,
+        clipped to the image, highest confidence first. Empty if no anchor
+        reaches ``conf_thr``.
+
+    Raises:
+        ValueError: If the number of class rows does not match ``class_names``.
     """
     pred = np.asarray(output, dtype=np.float32)[0].T  # (n_anchors, 4 + nc)
     nc = len(class_names)
     if pred.shape[1] != 4 + nc:
         raise ValueError(f"output has {pred.shape[1] - 4} classes, expected {nc}")
     cls_scores = pred[:, 4:]
+    # YOLOv8 has no separate objectness score: a box's confidence is its best class score.
     cls = cls_scores.argmax(1)
     conf = cls_scores[np.arange(len(cls)), cls]
     m = conf >= conf_thr
     if not m.any():
         return []
     xywh, cls, conf = pred[m, :4].astype(np.float64), cls[m], conf[m].astype(np.float64)
-    xyxy = np.column_stack([xywh[:, 0] - xywh[:, 2] / 2, xywh[:, 1] - xywh[:, 3] / 2,
-                            xywh[:, 0] + xywh[:, 2] / 2, xywh[:, 1] + xywh[:, 3] / 2])
+    xyxy = np.column_stack(
+        [
+            xywh[:, 0] - xywh[:, 2] / 2,
+            xywh[:, 1] - xywh[:, 3] / 2,
+            xywh[:, 0] + xywh[:, 2] / 2,
+            xywh[:, 1] + xywh[:, 3] / 2,
+        ]
+    )
     # Per-class NMS by shifting each class's boxes far apart (boxes of
     # different classes then never overlap).
     offset = cls[:, None] * 10_000.0
@@ -125,12 +169,21 @@ def decode(output: np.ndarray, r: float, pad: tuple[float, float], img_wh: tuple
     out = []
     for k in keep:
         x0, y0, x1, y1 = xyxy[k]
+        # Undo the letterbox: remove the padding, then divide by the scale.
         x0, x1 = np.clip([(x0 - dx) / r, (x1 - dx) / r], 0, W)
         y0, y1 = np.clip([(y0 - dy) / r, (y1 - dy) / r], 0, H)
         if x1 <= x0 or y1 <= y0:
             continue
-        out.append(Box(class_names[int(cls[k])], float((x0 + x1) / 2 / W), float((y0 + y1) / 2 / H),
-                       float((x1 - x0) / W), float((y1 - y0) / H), float(conf[k])))
+        out.append(
+            Box(
+                class_names[int(cls[k])],
+                float((x0 + x1) / 2 / W),
+                float((y0 + y1) / 2 / H),
+                float((x1 - x0) / W),
+                float((y1 - y0) / H),
+                float(conf[k]),
+            )
+        )
     return out
 
 
@@ -138,17 +191,25 @@ class OnnxYoloDetector:
     """YOLOv8 detector backed by an exported ONNX model.
 
     Args:
-        onnx_path: Path to ``best_fp32.onnx`` or ``best_fp16.onnx``.
+        onnx_path: Exported model, for example ``best_fp32_480.onnx`` (the
+            deployed model) or ``best_fp16.onnx``. The input size and precision
+            are read from the model.
         conf: Minimum confidence for a box to be returned. Keep this low
             (0.001 to 0.05) and apply the pass/fail threshold afterwards.
         iou: NMS IoU threshold (0.6 matches the Colab evaluation).
         threads: ONNX Runtime intra-op threads (None = library default).
 
+    Attributes:
+        last_timing: Preprocess, inference and postprocess time of the last
+            `detect` call, in milliseconds.
+
     Raises:
         FileNotFoundError: If the model file is missing.
     """
 
-    def __init__(self, onnx_path: str | Path, conf: float = 0.01, iou: float = 0.6, threads: int | None = None):
+    def __init__(
+        self, onnx_path: str | Path, conf: float = 0.01, iou: float = 0.6, threads: int | None = None
+    ):
         import onnxruntime as ort
 
         p = Path(onnx_path)
@@ -167,17 +228,40 @@ class OnnxYoloDetector:
         self.last_timing: dict[str, float] = {}
 
     def preprocess(self, rgb: np.ndarray):
-        """Letterbox and normalise to a (1, 3, S, S) tensor in [0, 1]."""
+        """Letterbox and normalise one frame for the network.
+
+        Args:
+            rgb: (H, W, 3) uint8 frame.
+
+        Returns:
+            ``(x, r, pad)``: the (1, 3, S, S) input tensor in [0, 1] (float16 for an
+            fp16 model, else float32), and the scale and padding from `letterbox`.
+        """
         lb, r, pad = letterbox(rgb, self.size)
         x = (lb.transpose(2, 0, 1)[None].astype(np.float32) / 255.0).astype(self.dtype)
         return x, r, pad
 
     def raw(self, x: np.ndarray) -> np.ndarray:
-        """Run the network on a preprocessed tensor."""
+        """Run the network on a preprocessed tensor.
+
+        Args:
+            x: Tensor from `preprocess`.
+
+        Returns:
+            Raw output of shape (1, 4 + n_classes, n_anchors), as `decode` expects.
+        """
         return self.session.run(None, {self.input_name: x})[0]
 
     def detect(self, rgb: np.ndarray) -> list[Box]:
-        """Detect defects in one RGB frame. Timing is stored in `last_timing` (ms)."""
+        """Detect defects in one RGB frame.
+
+        Args:
+            rgb: (H, W, 3) uint8 frame of any size.
+
+        Returns:
+            Boxes at or above the detector's ``conf``, in normalised coordinates.
+            The time taken by each stage is stored in ``last_timing``.
+        """
         t0 = time.perf_counter()
         x, r, pad = self.preprocess(rgb)
         t1 = time.perf_counter()
@@ -185,5 +269,9 @@ class OnnxYoloDetector:
         t2 = time.perf_counter()
         boxes = decode(y, r, pad, (rgb.shape[1], rgb.shape[0]), self.conf, self.iou)
         t3 = time.perf_counter()
-        self.last_timing = {"preprocess": 1e3 * (t1 - t0), "inference": 1e3 * (t2 - t1), "postprocess": 1e3 * (t3 - t2)}
+        self.last_timing = {
+            "preprocess": 1e3 * (t1 - t0),
+            "inference": 1e3 * (t2 - t1),
+            "postprocess": 1e3 * (t3 - t2),
+        }
         return boxes

@@ -67,7 +67,9 @@ def fit_logreg(Xtr, ytr, C=0.001):
     from sklearn.pipeline import make_pipeline
     from sklearn.preprocessing import StandardScaler
 
-    return make_pipeline(StandardScaler(), LogisticRegression(C=C, class_weight="balanced", max_iter=5000)).fit(Xtr, ytr)
+    return make_pipeline(
+        StandardScaler(), LogisticRegression(C=C, class_weight="balanced", max_iter=5000)
+    ).fit(Xtr, ytr)
 
 
 def auc(y, s):
@@ -86,12 +88,14 @@ def section_profile(index, out):
     out["extract_ms"] = {k: v / len(imgs) if k != "repeats" else v for k, v in out["extract_ms"].items()}
     # resize + colour conversion happen once per call, so time them on their own
     small = F.resize(imgs[0], cfg.work_size, cfg.interpolation)
-    per_group = {"resize": time_call(lambda: F.resize(imgs[0], cfg.work_size, cfg.interpolation))["median"],
-                 "rgb2hsv": time_call(lambda: F.rgb2hsv(small))["median"]}
+    per_group = {
+        "resize": time_call(lambda: F.resize(imgs[0], cfg.work_size, cfg.interpolation))["median"],
+        "rgb2hsv": time_call(lambda: F.rgb2hsv(small))["median"],
+    }
     base = time_call(lambda: F.extract(imgs[0], F.FeatureConfig(groups=("meat",))))["median"]
     for g in F.ALL_GROUPS:
-        per_group[g] = time_call(lambda: F.extract(imgs[0], F.FeatureConfig(groups=(g,))))["median"]
-    per_group["_note"] = "each group timed alone; includes resize + rgb2hsv + grey (about %.2f ms)" % base
+        per_group[g] = time_call(lambda g=g: F.extract(imgs[0], F.FeatureConfig(groups=(g,))))["median"]
+    per_group["_note"] = f"each group timed alone; includes resize + rgb2hsv + grey (about {base:.2f} ms)"
     out["group_ms"] = per_group
     try:
         from line_profiler import LineProfiler
@@ -122,9 +126,11 @@ def section_ablation(index, out):
     for drop in (None,) + F.ALL_GROUPS:
         cols = np.concatenate([np.arange(s.start, s.stop) for g, s in sl.items() if g != drop])
         m = fit_logreg(Xs["train"][:, cols], ys["train"])
-        res[drop or "none"] = {"n_features": int(len(cols)),
-                               "val_auc": auc(ys["val"], m.predict_proba(Xs["val"][:, cols])[:, 1]),
-                               "test_auc": auc(ys["test"], m.predict_proba(Xs["test"][:, cols])[:, 1])}
+        res[drop or "none"] = {
+            "n_features": int(len(cols)),
+            "val_auc": auc(ys["val"], m.predict_proba(Xs["val"][:, cols])[:, 1]),
+            "test_auc": auc(ys["test"], m.predict_proba(Xs["test"][:, cols])[:, 1]),
+        }
     out["ablation_logreg_drop_group"] = res
 
 
@@ -133,8 +139,9 @@ OPT_CONFIGS = {
     "baseline (skimage HSV, all groups)": F.FeatureConfig(),
     "fast HSV (PIL, all groups)": F.FeatureConfig(hsv="pil"),
     "lean (PIL HSV, colour + HOG only)": F.FeatureConfig(hsv="pil", groups=("colour", "hog")),
-    "lean + box 120x90 (from resolution study)": F.FeatureConfig(work_size=(120, 90), interpolation="box",
-                                                                 hsv="pil", groups=("colour", "hog")),
+    "lean + box 120x90 (from resolution study)": F.FeatureConfig(
+        work_size=(120, 90), interpolation="box", hsv="pil", groups=("colour", "hog")
+    ),
 }
 
 
@@ -144,7 +151,7 @@ def section_optimise(index, out, accuracy=True):
     P = parts_blocked(index)
     res = {}
     for name, cfg in OPT_CONFIGS.items():
-        t = time_call(lambda: [F.extract(im, cfg) for im in imgs], repeats=3, warmup=1)
+        t = time_call(lambda cfg=cfg: [F.extract(im, cfg) for im in imgs], repeats=3, warmup=1)
         r = {"extract_ms_per_frame": t["median"] / len(imgs), "n_features": int(len(F.extract(imgs[0], cfg)))}
         if accuracy:
             X = {s: F.extract_many(d["image"], cfg, cache_dir=RESULTS_DIR / "cache") for s, d in P.items()}
@@ -170,10 +177,15 @@ def section_resolution(index, out):
             X = {s: F.extract_many(d["image"], cfg, cache_dir=RESULTS_DIR / "cache") for s, d in P.items()}
             y = {s: d["fail"].to_numpy().astype(int) for s, d in P.items()}
             m = fit_logreg(X["train"], y["train"])
-            res.append({"work_size": list(ws), "interpolation": meth,
-                        "val_auc": auc(y["val"], m.predict_proba(X["val"])[:, 1]),
-                        "test_auc": auc(y["test"], m.predict_proba(X["test"])[:, 1]),
-                        "extract_ms": time_call(lambda: F.extract(img0, cfg), repeats=20)["median"]})
+            res.append(
+                {
+                    "work_size": list(ws),
+                    "interpolation": meth,
+                    "val_auc": auc(y["val"], m.predict_proba(X["val"])[:, 1]),
+                    "test_auc": auc(y["test"], m.predict_proba(X["test"])[:, 1]),
+                    "extract_ms": time_call(lambda cfg=cfg: F.extract(img0, cfg), repeats=20)["median"],
+                }
+            )
             print("resolution", ws, meth, round(res[-1]["val_auc"], 3), round(res[-1]["extract_ms"], 1), "ms")
     out["classical_resolution"] = res
     fig, axs = plt.subplots(1, 2, figsize=(8, 3.2))
@@ -181,8 +193,10 @@ def section_resolution(index, out):
         r = [x for x in res if x["interpolation"] == meth]
         axs[0].plot([x["work_size"][0] for x in r], [x["val_auc"] for x in r], "o-", label=meth)
         axs[1].plot([x["work_size"][0] for x in r], [x["extract_ms"] for x in r], "o-", label=meth)
-    axs[0].set_xlabel("working width (px)"); axs[0].set_ylabel("validation ROC AUC")
-    axs[1].set_xlabel("working width (px)"); axs[1].set_ylabel("feature time per frame (ms)")
+    axs[0].set_xlabel("working width (px)")
+    axs[0].set_ylabel("validation ROC AUC")
+    axs[1].set_xlabel("working width (px)")
+    axs[1].set_ylabel("feature time per frame (ms)")
     axs[0].legend(fontsize=7, title="interpolation", title_fontsize=7)
     fig.suptitle("Classical pipeline: resolution and interpolation", fontsize=10)
     fig.tight_layout()
@@ -220,20 +234,29 @@ def section_yolo(index, out, accuracy=True):
     img0 = F.load_rgb(P["test"]["image"].iloc[0])
     tj = json.loads((run / "threshold.json").read_text()) if (run / "threshold.json").exists() else {}
     thr = tj.get("best_fp32.onnx", {}).get("10")
-    variants = [("fp32", 640, "best_fp32.onnx"), ("fp16", 640, "best_fp16.onnx"),
-                ("fp32", 320, "best_fp32_320.onnx"), ("fp32", 480, "best_fp32_480.onnx"),
-                ("fp32", 800, "best_fp32_800.onnx")]
+    variants = [
+        ("fp32", 640, "best_fp32.onnx"),
+        ("fp16", 640, "best_fp16.onnx"),
+        ("fp32", 320, "best_fp32_320.onnx"),
+        ("fp32", 480, "best_fp32_480.onnx"),
+        ("fp32", 800, "best_fp32_800.onnx"),
+    ]
     res = []
     for prec, size, fn in variants:
         if not (w / fn).exists():
             continue
-        for threads in ((None, 1) if (prec, size) == ("fp32", 640) else (None,)):
+        for threads in (None, 1) if (prec, size) == ("fp32", 640) else (None,):
             det = OnnxYoloDetector(w / fn, conf=0.001, threads=threads)
             x, _, _ = det.preprocess(img0)
-            t_inf = time_call(lambda: det.raw(x), repeats=30)
-            t_all = time_call(lambda: det.detect(img0), repeats=20)
-            r = {"precision": prec, "imgsz": size, "threads": threads or "default",
-                 "inference_ms": t_inf, "end_to_end_ms": t_all["median"]}
+            t_inf = time_call(lambda det=det, x=x: det.raw(x), repeats=30)
+            t_all = time_call(lambda det=det: det.detect(img0), repeats=20)
+            r = {
+                "precision": prec,
+                "imgsz": size,
+                "threads": threads or "default",
+                "inference_ms": t_inf,
+                "end_to_end_ms": t_all["median"],
+            }
             if size == 640 and prec == "fp32" and threads is None:
                 r["achieved_gflops_per_s"] = y["gflops_conv_640"] / (t_inf["median"] / 1e3)
             if accuracy and threads is None:
@@ -243,8 +266,15 @@ def section_yolo(index, out, accuracy=True):
                 yv, yt = P["val"]["fail"].to_numpy(), P["test"]["fail"].to_numpy()
                 t, _ = choose_threshold(yv, sc["val"], DEFAULT_COST_RATIO)
                 m = passfail_metrics(yt, sc["test"], t, DEFAULT_COST_RATIO)
-                r.update({"val_auc": auc(yv, sc["val"]), "test_auc": m["roc_auc"], "threshold": t,
-                          "test_escape": m["escape_rate"]["value"], "test_false_reject": m["false_reject_rate"]["value"]})
+                r.update(
+                    {
+                        "val_auc": auc(yv, sc["val"]),
+                        "test_auc": m["roc_auc"],
+                        "threshold": t,
+                        "test_escape": m["escape_rate"]["value"],
+                        "test_false_reject": m["false_reject_rate"]["value"],
+                    }
+                )
             res.append(r)
             print("yolo", prec, size, threads, round(t_inf["median"], 1), "ms", r.get("val_auc"))
     y["variants"] = res
@@ -254,7 +284,9 @@ def section_yolo(index, out, accuracy=True):
     if acc:
         acc.sort(key=lambda r: r["imgsz"])
         fig, ax1 = plt.subplots(figsize=(5.5, 3.2))
-        ax1.plot([r["imgsz"] for r in acc], [r["test_auc"] for r in acc], "o-", color="C0", label="test ROC AUC")
+        ax1.plot(
+            [r["imgsz"] for r in acc], [r["test_auc"] for r in acc], "o-", color="C0", label="test ROC AUC"
+        )
         ax1.set_xlabel("network input size (px)")
         ax1.set_ylabel("test ROC AUC", color="C0")
         ax2 = ax1.twinx()
@@ -282,24 +314,43 @@ def section_repeat(index, out):
     bp = summ["models"]["mlp"]["best_params"]
     aucs, iters = [], []
     for seed in range(5):
-        m = make_pipeline(StandardScaler(), MLPClassifier(hidden_layer_sizes=tuple(bp["clf__hidden_layer_sizes"]),
-                          alpha=bp["clf__alpha"], max_iter=400, early_stopping=True, validation_fraction=0.15,
-                          n_iter_no_change=15, random_state=seed)).fit(Xs["train"], ys["train"])
+        m = make_pipeline(
+            StandardScaler(),
+            MLPClassifier(
+                hidden_layer_sizes=tuple(bp["clf__hidden_layer_sizes"]),
+                alpha=bp["clf__alpha"],
+                max_iter=400,
+                early_stopping=True,
+                validation_fraction=0.15,
+                n_iter_no_change=15,
+                random_state=seed,
+            ),
+        ).fit(Xs["train"], ys["train"])
         aucs.append(auc(ys["test"], m.predict_proba(Xs["test"])[:, 1]))
         iters.append(int(m[-1].n_iter_))
-    out["mlp_seed_repeatability"] = {"test_auc": aucs, "mean": float(np.mean(aucs)), "std": float(np.std(aucs, ddof=1)),
-                                     "n_iter": iters}
+    out["mlp_seed_repeatability"] = {
+        "test_auc": aucs,
+        "mean": float(np.mean(aucs)),
+        "std": float(np.std(aucs, ddof=1)),
+        "n_iter": iters,
+    }
 
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--machine", default=platform.node() or "unknown")
-    ap.add_argument("--sections", nargs="+", default=["profile", "ablation", "optimise", "resolution", "yolo", "repeat"])
+    ap.add_argument(
+        "--sections", nargs="+", default=["profile", "ablation", "optimise", "resolution", "yolo", "repeat"]
+    )
     args = ap.parse_args()
     FIG.mkdir(parents=True, exist_ok=True)
     index = build_index()
-    out = {"machine": args.machine, "platform": platform.platform(), "python": platform.python_version(),
-           "cpu_count": os.cpu_count()}
+    out = {
+        "machine": args.machine,
+        "platform": platform.platform(),
+        "python": platform.python_version(),
+        "cpu_count": os.cpu_count(),
+    }
     secs = set(args.sections)
     if "timing" in secs:
         secs |= {"profile", "yolo_timing", "optimise_timing"}

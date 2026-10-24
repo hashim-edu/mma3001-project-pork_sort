@@ -8,8 +8,8 @@ from porksort.detector import box_iou, decode, letterbox, nms
 from porksort.features import FeatureConfig, extract, group_slices, load_rgb, resize
 from porksort.perf import conv2d_flops, mlp_flops, roofline
 
-
 # ---------- features ----------
+
 
 def test_feature_length_is_independent_of_input_size():
     rng = np.random.default_rng(0)
@@ -55,6 +55,7 @@ def test_load_rgb_converts_grey(tmp_path):
 
 # ---------- detector maths ----------
 
+
 def test_letterbox_720x540():
     img = np.zeros((540, 720, 3), np.uint8)
     img[:, :, 0] = 255
@@ -91,11 +92,11 @@ def test_decode_round_trip():
     bw, bh = w * W * r, h * H * r
     out = np.zeros((1, 9, 3), np.float32)
     out[0, :4, 0] = [cx, cy, bw, bh]
-    out[0, 4 + 3, 0] = 0.9            # class 3 = unsealed
+    out[0, 4 + 3, 0] = 0.9  # class 3 = unsealed
     out[0, :4, 1] = [cx + 1, cy, bw, bh]
-    out[0, 4 + 3, 1] = 0.5            # duplicate, should be removed by NMS
+    out[0, 4 + 3, 1] = 0.5  # duplicate, should be removed by NMS
     out[0, :4, 2] = [cx, cy, bw, bh]
-    out[0, 4 + 1, 2] = 0.0005         # below confidence threshold
+    out[0, 4 + 1, 2] = 0.0005  # below confidence threshold
     boxes = decode(out, r, pad, (W, H), conf_thr=0.001, iou_thr=0.6)
     assert len(boxes) == 1
     bx = boxes[0]
@@ -109,6 +110,7 @@ def test_decode_rejects_wrong_class_count():
 
 
 # ---------- performance helpers ----------
+
 
 def test_conv_flops_against_direct_count():
     """Count multiply-adds of a naive convolution loop and compare with the formula."""
@@ -127,11 +129,12 @@ def test_conv_flops_against_direct_count():
 
 def test_mlp_flops_and_roofline():
     assert mlp_flops([10, 5, 1]) == (2 * 10 * 5 + 5) + (2 * 5 + 1)
-    assert roofline(0.5, peak_flops=100.0, bandwidth=50.0) == 25.0   # memory-bound
+    assert roofline(0.5, peak_flops=100.0, bandwidth=50.0) == 25.0  # memory-bound
     assert roofline(10.0, peak_flops=100.0, bandwidth=50.0) == 100.0  # compute-bound
 
 
 # ---------- optimised feature code agrees with the reference ----------
+
 
 def test_bincount_histogram_equals_histogramdd():
     from porksort.features import hsv_histogram, to_hsv

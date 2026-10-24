@@ -57,7 +57,14 @@ class BlockedSplitConfig:
 
 
 def roboflow_split(index: pd.DataFrame) -> pd.DataFrame:
-    """Return ``index`` with a ``split`` column taken from the export."""
+    """Use the split shipped with the Roboflow export.
+
+    Args:
+        index: Output of `porksort.dataset.build_index`.
+
+    Returns:
+        A copy of ``index`` with a ``split`` column (``train``, ``val`` or ``test``).
+    """
     out = index.copy()
     out["split"] = out["rf_split"].map({"train": "train", "valid": "val", "test": "test"})
     return out
@@ -113,9 +120,12 @@ def blocked_split(index: pd.DataFrame, cfg: BlockedSplitConfig = BlockedSplitCon
     for _ in range(cfg.n_trials):
         order = rng.permutation(len(blocks))
         cum = np.cumsum(sizes[order])
-        part = np.where(cum <= cfg.test_frac * n, "test",
-                        np.where(cum <= (cfg.test_frac + cfg.val_frac) * n, "val", "train"))
-        block_to_part = dict(zip(blocks[order], part))
+        part = np.where(
+            cum <= cfg.test_frac * n,
+            "test",
+            np.where(cum <= (cfg.test_frac + cfg.val_frac) * n, "val", "train"),
+        )
+        block_to_part = dict(zip(blocks[order], part, strict=True))
         assign = src["block"].map(block_to_part)
         s = _balance_score(src, assign)
         if s < best_score:
@@ -167,6 +177,11 @@ def load_split(index: pd.DataFrame, name: str, csv_path=None) -> pd.DataFrame:
         csv_path: Assignment CSV for the blocked split. Defaults to the
             committed ``splits/blocked_split.csv``, so every run and every
             machine (including Colab) uses the same frames.
+
+    Returns:
+        Per-image index with ``split`` and ``block`` columns. For the blocked
+        split, buffer frames are removed and validation and test keep one copy
+        of each frame (see `apply_split`).
 
     Raises:
         ValueError: For an unknown split name.

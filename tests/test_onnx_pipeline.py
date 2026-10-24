@@ -25,16 +25,26 @@ def make_tiny_yolo(path, dtype=TensorProto.FLOAT):
     shape = numpy_helper.from_array(np.array([1, 9, -1], np.int64), "shape")
     scale = numpy_helper.from_array(np.array(S, np_dtype).reshape(1), "scale")
     nodes = [
-        helper.make_node("Conv", ["images", "W", "B"], ["c"], name="conv0", kernel_shape=[3, 3],
-                         pads=[1, 1, 1, 1], strides=[8, 8]),
+        helper.make_node(
+            "Conv",
+            ["images", "W", "B"],
+            ["c"],
+            name="conv0",
+            kernel_shape=[3, 3],
+            pads=[1, 1, 1, 1],
+            strides=[8, 8],
+        ),
         helper.make_node("Sigmoid", ["c"], ["s"]),
         helper.make_node("Reshape", ["s", "shape"], ["r"]),
         helper.make_node("Mul", ["r", "scale"], ["output0"]),
     ]
-    g = helper.make_graph(nodes, "tiny",
-                          [helper.make_tensor_value_info("images", dtype, [1, 3, S, S])],
-                          [helper.make_tensor_value_info("output0", dtype, [1, 9, None])],
-                          initializer=[W, B, shape, scale])
+    g = helper.make_graph(
+        nodes,
+        "tiny",
+        [helper.make_tensor_value_info("images", dtype, [1, 3, S, S])],
+        [helper.make_tensor_value_info("output0", dtype, [1, 9, None])],
+        initializer=[W, B, shape, scale],
+    )
     m = helper.make_model(g, opset_imports=[helper.make_opsetid("", 17)])
     m.ir_version = 8
     onnx.save(m, path)

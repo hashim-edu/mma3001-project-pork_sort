@@ -40,17 +40,39 @@ from sklearn.tree import DecisionTreeClassifier
 
 
 class ColumnSlice(BaseEstimator, TransformerMixin):
-    """Keep only the columns in ``[start, stop)`` (selects a feature group)."""
+    """Keep only the columns in ``[start, stop)``, which selects one feature group.
+
+    Args:
+        start: First column kept.
+        stop: Column after the last one kept (None = to the end).
+    """
 
     def __init__(self, start: int = 0, stop: int | None = None):
         self.start = start
         self.stop = stop
 
     def fit(self, X, y=None):
+        """Do nothing: the selection has no learned state.
+
+        Args:
+            X: Feature matrix (ignored).
+            y: Labels (ignored).
+
+        Returns:
+            This transformer, so it can be chained in a scikit-learn pipeline.
+        """
         return self
 
     def transform(self, X):
-        return np.asarray(X)[:, self.start:self.stop]
+        """Select the columns.
+
+        Args:
+            X: (n, d) feature matrix.
+
+        Returns:
+            (n, stop - start) array.
+        """
+        return np.asarray(X)[:, self.start : self.stop]
 
 
 def make_model(name: str, colour_slice: slice = slice(0, 128), seed: int = 0) -> tuple[Pipeline, dict]:
@@ -70,27 +92,46 @@ def make_model(name: str, colour_slice: slice = slice(0, 128), seed: int = 0) ->
     if name == "majority":
         return Pipeline([("clf", DummyClassifier(strategy="prior"))]), {}
     if name == "colour_lr":
-        pipe = Pipeline([
-            ("cols", ColumnSlice(colour_slice.start, colour_slice.stop)),
-            ("scale", StandardScaler()),
-            ("clf", LogisticRegression(class_weight="balanced", max_iter=5000)),
-        ])
+        pipe = Pipeline(
+            [
+                ("cols", ColumnSlice(colour_slice.start, colour_slice.stop)),
+                ("scale", StandardScaler()),
+                ("clf", LogisticRegression(class_weight="balanced", max_iter=5000)),
+            ]
+        )
         return pipe, {"clf__C": [0.01, 0.1, 1.0, 10.0]}
     if name == "logreg":
-        pipe = Pipeline([("scale", StandardScaler()),
-                         ("clf", LogisticRegression(class_weight="balanced", max_iter=5000))])
+        pipe = Pipeline(
+            [("scale", StandardScaler()), ("clf", LogisticRegression(class_weight="balanced", max_iter=5000))]
+        )
         return pipe, {"clf__C": [0.001, 0.01, 0.1, 1.0]}
     if name == "tree":
         pipe = Pipeline([("clf", DecisionTreeClassifier(class_weight="balanced", random_state=seed))])
         return pipe, {"clf__max_depth": [3, 5, 8, 12, None], "clf__min_samples_leaf": [1, 5, 20, 50]}
     if name == "svm":
-        pipe = Pipeline([("scale", StandardScaler()),
-                         ("clf", SVC(kernel="rbf", class_weight="balanced", random_state=seed))])
+        pipe = Pipeline(
+            [
+                ("scale", StandardScaler()),
+                ("clf", SVC(kernel="rbf", class_weight="balanced", random_state=seed)),
+            ]
+        )
         return pipe, {"clf__C": [0.3, 1.0, 3.0, 10.0], "clf__gamma": ["scale", 1e-4, 3e-4]}
     if name == "mlp":
-        pipe = Pipeline([("scale", StandardScaler()),
-                         ("clf", MLPClassifier(max_iter=400, early_stopping=True, validation_fraction=0.15,
-                                               n_iter_no_change=15, random_state=seed))])
+        pipe = Pipeline(
+            [
+                ("scale", StandardScaler()),
+                (
+                    "clf",
+                    MLPClassifier(
+                        max_iter=400,
+                        early_stopping=True,
+                        validation_fraction=0.15,
+                        n_iter_no_change=15,
+                        random_state=seed,
+                    ),
+                ),
+            ]
+        )
         return pipe, {"clf__hidden_layer_sizes": [(64,), (256,), (128, 64)], "clf__alpha": [1e-3, 1e-1, 1.0]}
     raise ValueError(f"unknown model {name!r}")
 
@@ -105,11 +146,20 @@ def defect_score(model: Pipeline, X: np.ndarray) -> np.ndarray:
     so its signed distance to the boundary is passed through the logistic
     function. That keeps the ranking (so ROC AUC and threshold sweeps are
     unaffected) but the value is not a calibrated probability.
+
+    Args:
+        model: Fitted pipeline from `make_model`.
+        X: (n, d) feature matrix.
+
+    Returns:
+        (n,) array of defect scores in [0, 1].
     """
     clf = model[-1]
     if hasattr(clf, "predict_proba"):
         classes = list(clf.classes_)
         P = model.predict_proba(X)
+        # Column of the FAIL class (label 1). A model fitted on one class has no such column.
         return P[:, classes.index(1)] if 1 in classes else np.zeros(len(X))
     d = model.decision_function(X)
+    # Logistic squashing keeps the SVM's ranking but maps it into (0, 1).
     return 1.0 / (1.0 + np.exp(-d))

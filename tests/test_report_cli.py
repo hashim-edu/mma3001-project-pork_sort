@@ -22,7 +22,9 @@ class FakeDetector:
 
 
 def test_input_warnings():
-    assert input_warnings(np.full((540, 720, 3), 100, np.uint8)) == ["frame is nearly uniform; camera may be blocked or the frame blank"]
+    assert input_warnings(np.full((540, 720, 3), 100, np.uint8)) == [
+        "frame is nearly uniform; camera may be blocked or the frame blank"
+    ]
     w = input_warnings(np.random.default_rng(0).integers(0, 10, (100, 100, 3), dtype=np.uint8))
     assert any("differs" in x for x in w) and any("very dark" in x for x in w)
     assert input_warnings(np.random.default_rng(0).integers(0, 255, (540, 720, 3), dtype=np.uint8)) == []
@@ -30,8 +32,13 @@ def test_input_warnings():
 
 def test_write_report_and_annotate(tmp_path):
     rgb = np.zeros((54, 72, 3), np.uint8)
-    rep = InspectionReport("f.jpg", "FAIL", 0.8, 0.3,
-                           [{"class": "unsealed", "confidence": 0.8, "bbox_px": [10, 10, 40, 40], "area_frac": 0.1}])
+    rep = InspectionReport(
+        "f.jpg",
+        "FAIL",
+        0.8,
+        0.3,
+        [{"class": "unsealed", "confidence": 0.8, "bbox_px": [10, 10, 40, 40], "area_frac": 0.1}],
+    )
     p = write_report(rep, rgb, tmp_path)
     data = json.loads(p.read_text())
     assert data["status"] == "FAIL" and data["defects"][0]["class"] == "unsealed"
@@ -43,13 +50,17 @@ def test_cli_inspect_mixed_inputs(tmp_path, monkeypatch):
     monkeypatch.setattr(detector_mod, "OnnxYoloDetector", FakeDetector)
     img_dir = tmp_path / "in"
     img_dir.mkdir()
-    Image.fromarray(np.random.default_rng(0).integers(0, 255, (540, 720, 3), dtype=np.uint8)).save(img_dir / "a.jpg")
+    Image.fromarray(np.random.default_rng(0).integers(0, 255, (540, 720, 3), dtype=np.uint8)).save(
+        img_dir / "a.jpg"
+    )
     (img_dir / "notes.txt").write_text("not an image")
     (img_dir / "broken.jpg").write_text("corrupt")
     weights = tmp_path / "w.onnx"
     weights.write_text("")
     out = tmp_path / "out"
-    code = cli.main(["inspect", str(img_dir), "--weights", str(weights), "--threshold", "0.3", "--out", str(out)])
+    code = cli.main(
+        ["inspect", str(img_dir), "--weights", str(weights), "--threshold", "0.3", "--out", str(out)]
+    )
     assert code == 2  # some inputs were errors
     a = json.loads((out / "a.json").read_text())
     assert a["status"] == "FAIL"
@@ -62,9 +73,22 @@ def test_cli_inspect_mixed_inputs(tmp_path, monkeypatch):
 
 
 def test_cli_bad_arguments(tmp_path):
-    assert cli.main(["inspect", str(tmp_path), "--threshold", "1.7", "--weights", str(tmp_path / "w.onnx")]) == 1
-    assert cli.main(["inspect", str(tmp_path / "empty_dir_missing"), "--threshold", "0.5",
-                     "--weights", str(tmp_path / "w.onnx")]) == 1
+    assert (
+        cli.main(["inspect", str(tmp_path), "--threshold", "1.7", "--weights", str(tmp_path / "w.onnx")]) == 1
+    )
+    assert (
+        cli.main(
+            [
+                "inspect",
+                str(tmp_path / "empty_dir_missing"),
+                "--threshold",
+                "0.5",
+                "--weights",
+                str(tmp_path / "w.onnx"),
+            ]
+        )
+        == 1
+    )
 
 
 def test_resolve_threshold_by_weights_and_cost_ratio(tmp_path):
@@ -77,5 +101,6 @@ def test_resolve_threshold_by_weights_and_cost_ratio(tmp_path):
     assert cli.resolve_threshold("auto", w, 1.0) == 0.13
     assert cli.resolve_threshold("0.4", w) == 0.4
     import pytest
+
     with pytest.raises(ValueError, match="no threshold"):
         cli.resolve_threshold("auto", w, 7)

@@ -125,8 +125,8 @@ minimise expected cost, where a false PASS (a defective pack shipped) costs
 </span><span id="L-18"><a href="#L-18"><span class="linenos"> 18</span></a>
 </span><span id="L-19"><a href="#L-19"><span class="linenos"> 19</span></a><span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
 </span><span id="L-20"><a href="#L-20"><span class="linenos"> 20</span></a>
-</span><span id="L-21"><a href="#L-21"><span class="linenos"> 21</span></a><span class="kn">from</span><span class="w"> </span><span class="nn">dataclasses</span><span class="w"> </span><span class="kn">import</span> <span class="n">dataclass</span><span class="p">,</span> <span class="n">field</span>
-</span><span id="L-22"><a href="#L-22"><span class="linenos"> 22</span></a><span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Iterable</span><span class="p">,</span> <span class="n">Sequence</span>
+</span><span id="L-21"><a href="#L-21"><span class="linenos"> 21</span></a><span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Iterable</span><span class="p">,</span> <span class="n">Sequence</span>
+</span><span id="L-22"><a href="#L-22"><span class="linenos"> 22</span></a><span class="kn">from</span><span class="w"> </span><span class="nn">dataclasses</span><span class="w"> </span><span class="kn">import</span> <span class="n">dataclass</span><span class="p">,</span> <span class="n">field</span>
 </span><span id="L-23"><a href="#L-23"><span class="linenos"> 23</span></a>
 </span><span id="L-24"><a href="#L-24"><span class="linenos"> 24</span></a><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
 </span><span id="L-25"><a href="#L-25"><span class="linenos"> 25</span></a>
@@ -152,70 +152,114 @@ minimise expected cost, where a false PASS (a defective pack shipped) costs
 </span><span id="L-45"><a href="#L-45"><span class="linenos"> 45</span></a>
 </span><span id="L-46"><a href="#L-46"><span class="linenos"> 46</span></a>
 </span><span id="L-47"><a href="#L-47"><span class="linenos"> 47</span></a><span class="k">def</span><span class="w"> </span><span class="nf">frame_score</span><span class="p">(</span><span class="n">boxes</span><span class="p">:</span> <span class="n">Iterable</span><span class="p">[</span><span class="n">Box</span><span class="p">],</span> <span class="n">defect_classes</span><span class="p">:</span> <span class="nb">frozenset</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="n">DEFECT_CLASSES</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
-</span><span id="L-48"><a href="#L-48"><span class="linenos"> 48</span></a><span class="w">    </span><span class="sd">"""Highest confidence among defect boxes, or 0.0 if there are none."""</span>
-</span><span id="L-49"><a href="#L-49"><span class="linenos"> 49</span></a>    <span class="k">return</span> <span class="nb">max</span><span class="p">((</span><span class="n">b</span><span class="o">.</span><span class="n">conf</span> <span class="k">for</span> <span class="n">b</span> <span class="ow">in</span> <span class="n">boxes</span> <span class="k">if</span> <span class="n">b</span><span class="o">.</span><span class="n">cls</span> <span class="ow">in</span> <span class="n">defect_classes</span><span class="p">),</span> <span class="n">default</span><span class="o">=</span><span class="mf">0.0</span><span class="p">)</span>
-</span><span id="L-50"><a href="#L-50"><span class="linenos"> 50</span></a>
-</span><span id="L-51"><a href="#L-51"><span class="linenos"> 51</span></a>
-</span><span id="L-52"><a href="#L-52"><span class="linenos"> 52</span></a><span class="k">def</span><span class="w"> </span><span class="nf">decide</span><span class="p">(</span><span class="n">boxes</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">Box</span><span class="p">],</span> <span class="n">threshold</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">defect_classes</span><span class="p">:</span> <span class="nb">frozenset</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="n">DEFECT_CLASSES</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Decision</span><span class="p">:</span>
-</span><span id="L-53"><a href="#L-53"><span class="linenos"> 53</span></a><span class="w">    </span><span class="sd">"""Apply the pass/fail rule to the detections of one frame.</span>
-</span><span id="L-54"><a href="#L-54"><span class="linenos"> 54</span></a>
-</span><span id="L-55"><a href="#L-55"><span class="linenos"> 55</span></a><span class="sd">    Args:</span>
-</span><span id="L-56"><a href="#L-56"><span class="linenos"> 56</span></a><span class="sd">        boxes: Detections for the frame, each with a confidence.</span>
-</span><span id="L-57"><a href="#L-57"><span class="linenos"> 57</span></a><span class="sd">        threshold: Confidence at or above which a defect box fails the frame.</span>
-</span><span id="L-58"><a href="#L-58"><span class="linenos"> 58</span></a><span class="sd">        defect_classes: Classes that count as defects.</span>
+</span><span id="L-48"><a href="#L-48"><span class="linenos"> 48</span></a><span class="w">    </span><span class="sd">"""Defect score of one frame.</span>
+</span><span id="L-49"><a href="#L-49"><span class="linenos"> 49</span></a>
+</span><span id="L-50"><a href="#L-50"><span class="linenos"> 50</span></a><span class="sd">    Args:</span>
+</span><span id="L-51"><a href="#L-51"><span class="linenos"> 51</span></a><span class="sd">        boxes: Detections for the frame.</span>
+</span><span id="L-52"><a href="#L-52"><span class="linenos"> 52</span></a><span class="sd">        defect_classes: Classes that count as defects.</span>
+</span><span id="L-53"><a href="#L-53"><span class="linenos"> 53</span></a>
+</span><span id="L-54"><a href="#L-54"><span class="linenos"> 54</span></a><span class="sd">    Returns:</span>
+</span><span id="L-55"><a href="#L-55"><span class="linenos"> 55</span></a><span class="sd">        The highest confidence among defect boxes, or 0.0 if there are none.</span>
+</span><span id="L-56"><a href="#L-56"><span class="linenos"> 56</span></a><span class="sd">    """</span>
+</span><span id="L-57"><a href="#L-57"><span class="linenos"> 57</span></a>    <span class="k">return</span> <span class="nb">max</span><span class="p">((</span><span class="n">b</span><span class="o">.</span><span class="n">conf</span> <span class="k">for</span> <span class="n">b</span> <span class="ow">in</span> <span class="n">boxes</span> <span class="k">if</span> <span class="n">b</span><span class="o">.</span><span class="n">cls</span> <span class="ow">in</span> <span class="n">defect_classes</span><span class="p">),</span> <span class="n">default</span><span class="o">=</span><span class="mf">0.0</span><span class="p">)</span>
+</span><span id="L-58"><a href="#L-58"><span class="linenos"> 58</span></a>
 </span><span id="L-59"><a href="#L-59"><span class="linenos"> 59</span></a>
-</span><span id="L-60"><a href="#L-60"><span class="linenos"> 60</span></a><span class="sd">    Raises:</span>
-</span><span id="L-61"><a href="#L-61"><span class="linenos"> 61</span></a><span class="sd">        ValueError: If ``threshold`` is outside [0, 1].</span>
-</span><span id="L-62"><a href="#L-62"><span class="linenos"> 62</span></a><span class="sd">    """</span>
-</span><span id="L-63"><a href="#L-63"><span class="linenos"> 63</span></a>    <span class="k">if</span> <span class="ow">not</span> <span class="mf">0.0</span> <span class="o">&lt;=</span> <span class="n">threshold</span> <span class="o">&lt;=</span> <span class="mf">1.0</span><span class="p">:</span>
-</span><span id="L-64"><a href="#L-64"><span class="linenos"> 64</span></a>        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"threshold must be in [0, 1], got </span><span class="si">{</span><span class="n">threshold</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
-</span><span id="L-65"><a href="#L-65"><span class="linenos"> 65</span></a>    <span class="n">defects</span> <span class="o">=</span> <span class="p">[</span><span class="n">b</span> <span class="k">for</span> <span class="n">b</span> <span class="ow">in</span> <span class="n">boxes</span> <span class="k">if</span> <span class="n">b</span><span class="o">.</span><span class="n">cls</span> <span class="ow">in</span> <span class="n">defect_classes</span> <span class="ow">and</span> <span class="n">b</span><span class="o">.</span><span class="n">conf</span> <span class="o">&gt;=</span> <span class="n">threshold</span><span class="p">]</span>
-</span><span id="L-66"><a href="#L-66"><span class="linenos"> 66</span></a>    <span class="n">score</span> <span class="o">=</span> <span class="n">frame_score</span><span class="p">(</span><span class="n">boxes</span><span class="p">,</span> <span class="n">defect_classes</span><span class="p">)</span>
-</span><span id="L-67"><a href="#L-67"><span class="linenos"> 67</span></a>    <span class="k">return</span> <span class="n">Decision</span><span class="p">(</span><span class="s2">"FAIL"</span> <span class="k">if</span> <span class="n">defects</span> <span class="k">else</span> <span class="s2">"PASS"</span><span class="p">,</span> <span class="n">score</span><span class="p">,</span> <span class="n">threshold</span><span class="p">,</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">defects</span><span class="p">,</span> <span class="n">key</span><span class="o">=</span><span class="k">lambda</span> <span class="n">b</span><span class="p">:</span> <span class="o">-</span><span class="n">b</span><span class="o">.</span><span class="n">conf</span><span class="p">))</span>
-</span><span id="L-68"><a href="#L-68"><span class="linenos"> 68</span></a>
+</span><span id="L-60"><a href="#L-60"><span class="linenos"> 60</span></a><span class="k">def</span><span class="w"> </span><span class="nf">decide</span><span class="p">(</span>
+</span><span id="L-61"><a href="#L-61"><span class="linenos"> 61</span></a>    <span class="n">boxes</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">Box</span><span class="p">],</span> <span class="n">threshold</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">defect_classes</span><span class="p">:</span> <span class="nb">frozenset</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="n">DEFECT_CLASSES</span>
+</span><span id="L-62"><a href="#L-62"><span class="linenos"> 62</span></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Decision</span><span class="p">:</span>
+</span><span id="L-63"><a href="#L-63"><span class="linenos"> 63</span></a><span class="w">    </span><span class="sd">"""Apply the pass/fail rule to the detections of one frame.</span>
+</span><span id="L-64"><a href="#L-64"><span class="linenos"> 64</span></a>
+</span><span id="L-65"><a href="#L-65"><span class="linenos"> 65</span></a><span class="sd">    Args:</span>
+</span><span id="L-66"><a href="#L-66"><span class="linenos"> 66</span></a><span class="sd">        boxes: Detections for the frame, each with a confidence.</span>
+</span><span id="L-67"><a href="#L-67"><span class="linenos"> 67</span></a><span class="sd">        threshold: Confidence at or above which a defect box fails the frame.</span>
+</span><span id="L-68"><a href="#L-68"><span class="linenos"> 68</span></a><span class="sd">        defect_classes: Classes that count as defects.</span>
 </span><span id="L-69"><a href="#L-69"><span class="linenos"> 69</span></a>
-</span><span id="L-70"><a href="#L-70"><span class="linenos"> 70</span></a><span class="k">def</span><span class="w"> </span><span class="nf">expected_cost</span><span class="p">(</span><span class="n">y_fail</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">scores</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">threshold</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
-</span><span id="L-71"><a href="#L-71"><span class="linenos"> 71</span></a>                  <span class="n">cost_ratio</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">DEFAULT_COST_RATIO</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
-</span><span id="L-72"><a href="#L-72"><span class="linenos"> 72</span></a><span class="w">    </span><span class="sd">"""Mean cost per frame at a threshold.</span>
+</span><span id="L-70"><a href="#L-70"><span class="linenos"> 70</span></a><span class="sd">    Returns:</span>
+</span><span id="L-71"><a href="#L-71"><span class="linenos"> 71</span></a><span class="sd">        A `Decision`: FAIL if any defect box reaches the threshold, with those</span>
+</span><span id="L-72"><a href="#L-72"><span class="linenos"> 72</span></a><span class="sd">        boxes sorted by confidence (highest first); PASS otherwise.</span>
 </span><span id="L-73"><a href="#L-73"><span class="linenos"> 73</span></a>
-</span><span id="L-74"><a href="#L-74"><span class="linenos"> 74</span></a><span class="sd">    Cost is ``cost_ratio`` for each false PASS (defective frame scored below</span>
-</span><span id="L-75"><a href="#L-75"><span class="linenos"> 75</span></a><span class="sd">    the threshold) and 1 for each false FAIL (good frame at or above it).</span>
+</span><span id="L-74"><a href="#L-74"><span class="linenos"> 74</span></a><span class="sd">    Raises:</span>
+</span><span id="L-75"><a href="#L-75"><span class="linenos"> 75</span></a><span class="sd">        ValueError: If ``threshold`` is outside [0, 1].</span>
 </span><span id="L-76"><a href="#L-76"><span class="linenos"> 76</span></a><span class="sd">    """</span>
-</span><span id="L-77"><a href="#L-77"><span class="linenos"> 77</span></a>    <span class="n">y</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">y_fail</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">bool</span><span class="p">)</span>
-</span><span id="L-78"><a href="#L-78"><span class="linenos"> 78</span></a>    <span class="n">pred</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">scores</span><span class="p">)</span> <span class="o">&gt;=</span> <span class="n">threshold</span>
-</span><span id="L-79"><a href="#L-79"><span class="linenos"> 79</span></a>    <span class="n">false_pass</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">y</span> <span class="o">&amp;</span> <span class="o">~</span><span class="n">pred</span><span class="p">)</span>
-</span><span id="L-80"><a href="#L-80"><span class="linenos"> 80</span></a>    <span class="n">false_fail</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="o">~</span><span class="n">y</span> <span class="o">&amp;</span> <span class="n">pred</span><span class="p">)</span>
-</span><span id="L-81"><a href="#L-81"><span class="linenos"> 81</span></a>    <span class="k">return</span> <span class="nb">float</span><span class="p">((</span><span class="n">cost_ratio</span> <span class="o">*</span> <span class="n">false_pass</span> <span class="o">+</span> <span class="n">false_fail</span><span class="p">)</span> <span class="o">/</span> <span class="nb">len</span><span class="p">(</span><span class="n">y</span><span class="p">))</span>
-</span><span id="L-82"><a href="#L-82"><span class="linenos"> 82</span></a>
+</span><span id="L-77"><a href="#L-77"><span class="linenos"> 77</span></a>    <span class="k">if</span> <span class="ow">not</span> <span class="mf">0.0</span> <span class="o">&lt;=</span> <span class="n">threshold</span> <span class="o">&lt;=</span> <span class="mf">1.0</span><span class="p">:</span>
+</span><span id="L-78"><a href="#L-78"><span class="linenos"> 78</span></a>        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"threshold must be in [0, 1], got </span><span class="si">{</span><span class="n">threshold</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+</span><span id="L-79"><a href="#L-79"><span class="linenos"> 79</span></a>    <span class="n">defects</span> <span class="o">=</span> <span class="p">[</span><span class="n">b</span> <span class="k">for</span> <span class="n">b</span> <span class="ow">in</span> <span class="n">boxes</span> <span class="k">if</span> <span class="n">b</span><span class="o">.</span><span class="n">cls</span> <span class="ow">in</span> <span class="n">defect_classes</span> <span class="ow">and</span> <span class="n">b</span><span class="o">.</span><span class="n">conf</span> <span class="o">&gt;=</span> <span class="n">threshold</span><span class="p">]</span>
+</span><span id="L-80"><a href="#L-80"><span class="linenos"> 80</span></a>    <span class="c1"># The score is reported even for PASS frames, so operators can see near misses.</span>
+</span><span id="L-81"><a href="#L-81"><span class="linenos"> 81</span></a>    <span class="n">score</span> <span class="o">=</span> <span class="n">frame_score</span><span class="p">(</span><span class="n">boxes</span><span class="p">,</span> <span class="n">defect_classes</span><span class="p">)</span>
+</span><span id="L-82"><a href="#L-82"><span class="linenos"> 82</span></a>    <span class="k">return</span> <span class="n">Decision</span><span class="p">(</span><span class="s2">"FAIL"</span> <span class="k">if</span> <span class="n">defects</span> <span class="k">else</span> <span class="s2">"PASS"</span><span class="p">,</span> <span class="n">score</span><span class="p">,</span> <span class="n">threshold</span><span class="p">,</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">defects</span><span class="p">,</span> <span class="n">key</span><span class="o">=</span><span class="k">lambda</span> <span class="n">b</span><span class="p">:</span> <span class="o">-</span><span class="n">b</span><span class="o">.</span><span class="n">conf</span><span class="p">))</span>
 </span><span id="L-83"><a href="#L-83"><span class="linenos"> 83</span></a>
-</span><span id="L-84"><a href="#L-84"><span class="linenos"> 84</span></a><span class="k">def</span><span class="w"> </span><span class="nf">candidate_thresholds</span><span class="p">(</span><span class="n">scores</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
-</span><span id="L-85"><a href="#L-85"><span class="linenos"> 85</span></a><span class="w">    </span><span class="sd">"""Midpoints between consecutive distinct scores, plus both extremes.</span>
-</span><span id="L-86"><a href="#L-86"><span class="linenos"> 86</span></a>
-</span><span id="L-87"><a href="#L-87"><span class="linenos"> 87</span></a><span class="sd">    Every distinct way of splitting the frames is represented exactly once, so</span>
-</span><span id="L-88"><a href="#L-88"><span class="linenos"> 88</span></a><span class="sd">    searching these candidates finds the true minimum of the cost on the data.</span>
-</span><span id="L-89"><a href="#L-89"><span class="linenos"> 89</span></a><span class="sd">    """</span>
-</span><span id="L-90"><a href="#L-90"><span class="linenos"> 90</span></a>    <span class="n">s</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">unique</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">clip</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">scores</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">),</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">))</span>
-</span><span id="L-91"><a href="#L-91"><span class="linenos"> 91</span></a>    <span class="n">mids</span> <span class="o">=</span> <span class="p">(</span><span class="n">s</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">+</span> <span class="n">s</span><span class="p">[</span><span class="mi">1</span><span class="p">:])</span> <span class="o">/</span> <span class="mi">2</span> <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">s</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span> <span class="k">else</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([])</span>
-</span><span id="L-92"><a href="#L-92"><span class="linenos"> 92</span></a>    <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">([[</span><span class="mf">0.0</span><span class="p">],</span> <span class="n">mids</span><span class="p">,</span> <span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">nextafter</span><span class="p">(</span><span class="n">s</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span> <span class="mf">2.0</span><span class="p">)</span> <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">s</span><span class="p">)</span> <span class="k">else</span> <span class="mf">1.0</span><span class="p">]])</span><span class="o">.</span><span class="n">clip</span><span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">)</span>
-</span><span id="L-93"><a href="#L-93"><span class="linenos"> 93</span></a>
-</span><span id="L-94"><a href="#L-94"><span class="linenos"> 94</span></a>
-</span><span id="L-95"><a href="#L-95"><span class="linenos"> 95</span></a><span class="k">def</span><span class="w"> </span><span class="nf">choose_threshold</span><span class="p">(</span><span class="n">y_fail</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">scores</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
-</span><span id="L-96"><a href="#L-96"><span class="linenos"> 96</span></a>                     <span class="n">cost_ratio</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">DEFAULT_COST_RATIO</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">]:</span>
-</span><span id="L-97"><a href="#L-97"><span class="linenos"> 97</span></a><span class="w">    </span><span class="sd">"""Threshold that minimises expected cost on labelled data.</span>
+</span><span id="L-84"><a href="#L-84"><span class="linenos"> 84</span></a>
+</span><span id="L-85"><a href="#L-85"><span class="linenos"> 85</span></a><span class="k">def</span><span class="w"> </span><span class="nf">expected_cost</span><span class="p">(</span>
+</span><span id="L-86"><a href="#L-86"><span class="linenos"> 86</span></a>    <span class="n">y_fail</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">scores</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">threshold</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">cost_ratio</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">DEFAULT_COST_RATIO</span>
+</span><span id="L-87"><a href="#L-87"><span class="linenos"> 87</span></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+</span><span id="L-88"><a href="#L-88"><span class="linenos"> 88</span></a><span class="w">    </span><span class="sd">"""Mean cost per frame at a threshold.</span>
+</span><span id="L-89"><a href="#L-89"><span class="linenos"> 89</span></a>
+</span><span id="L-90"><a href="#L-90"><span class="linenos"> 90</span></a><span class="sd">    Each false PASS (a defective frame scored below the threshold) costs</span>
+</span><span id="L-91"><a href="#L-91"><span class="linenos"> 91</span></a><span class="sd">    ``cost_ratio`` and each false FAIL (a good frame at or above it) costs 1.</span>
+</span><span id="L-92"><a href="#L-92"><span class="linenos"> 92</span></a>
+</span><span id="L-93"><a href="#L-93"><span class="linenos"> 93</span></a><span class="sd">    Args:</span>
+</span><span id="L-94"><a href="#L-94"><span class="linenos"> 94</span></a><span class="sd">        y_fail: True labels, True = defective frame.</span>
+</span><span id="L-95"><a href="#L-95"><span class="linenos"> 95</span></a><span class="sd">        scores: Defect scores in [0, 1], one per frame.</span>
+</span><span id="L-96"><a href="#L-96"><span class="linenos"> 96</span></a><span class="sd">        threshold: Frames with score &gt;= threshold are predicted FAIL.</span>
+</span><span id="L-97"><a href="#L-97"><span class="linenos"> 97</span></a><span class="sd">        cost_ratio: Cost of a false PASS relative to a false FAIL.</span>
 </span><span id="L-98"><a href="#L-98"><span class="linenos"> 98</span></a>
-</span><span id="L-99"><a href="#L-99"><span class="linenos"> 99</span></a><span class="sd">    Ties are broken towards the lower threshold, which fails more frames,</span>
-</span><span id="L-100"><a href="#L-100"><span class="linenos">100</span></a><span class="sd">    because a false PASS is the more expensive mistake.</span>
-</span><span id="L-101"><a href="#L-101"><span class="linenos">101</span></a>
-</span><span id="L-102"><a href="#L-102"><span class="linenos">102</span></a><span class="sd">    Returns:</span>
-</span><span id="L-103"><a href="#L-103"><span class="linenos">103</span></a><span class="sd">        ``(threshold, cost)``.</span>
-</span><span id="L-104"><a href="#L-104"><span class="linenos">104</span></a><span class="sd">    """</span>
-</span><span id="L-105"><a href="#L-105"><span class="linenos">105</span></a>    <span class="n">y</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">y_fail</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">bool</span><span class="p">)</span>
-</span><span id="L-106"><a href="#L-106"><span class="linenos">106</span></a>    <span class="k">if</span> <span class="n">y</span><span class="o">.</span><span class="n">size</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
-</span><span id="L-107"><a href="#L-107"><span class="linenos">107</span></a>        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"cannot choose a threshold from zero frames"</span><span class="p">)</span>
-</span><span id="L-108"><a href="#L-108"><span class="linenos">108</span></a>    <span class="n">cands</span> <span class="o">=</span> <span class="n">candidate_thresholds</span><span class="p">(</span><span class="n">scores</span><span class="p">)</span>
-</span><span id="L-109"><a href="#L-109"><span class="linenos">109</span></a>    <span class="n">costs</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">expected_cost</span><span class="p">(</span><span class="n">y</span><span class="p">,</span> <span class="n">scores</span><span class="p">,</span> <span class="n">t</span><span class="p">,</span> <span class="n">cost_ratio</span><span class="p">)</span> <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">cands</span><span class="p">])</span>
-</span><span id="L-110"><a href="#L-110"><span class="linenos">110</span></a>    <span class="n">i</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">flatnonzero</span><span class="p">(</span><span class="n">costs</span> <span class="o">==</span> <span class="n">costs</span><span class="o">.</span><span class="n">min</span><span class="p">())[</span><span class="mi">0</span><span class="p">])</span>
-</span><span id="L-111"><a href="#L-111"><span class="linenos">111</span></a>    <span class="k">return</span> <span class="nb">float</span><span class="p">(</span><span class="n">cands</span><span class="p">[</span><span class="n">i</span><span class="p">]),</span> <span class="nb">float</span><span class="p">(</span><span class="n">costs</span><span class="p">[</span><span class="n">i</span><span class="p">])</span>
+</span><span id="L-99"><a href="#L-99"><span class="linenos"> 99</span></a><span class="sd">    Returns:</span>
+</span><span id="L-100"><a href="#L-100"><span class="linenos">100</span></a><span class="sd">        ``(cost_ratio * false PASSes + false FAILs) / number of frames``.</span>
+</span><span id="L-101"><a href="#L-101"><span class="linenos">101</span></a><span class="sd">    """</span>
+</span><span id="L-102"><a href="#L-102"><span class="linenos">102</span></a>    <span class="n">y</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">y_fail</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">bool</span><span class="p">)</span>
+</span><span id="L-103"><a href="#L-103"><span class="linenos">103</span></a>    <span class="n">pred</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">scores</span><span class="p">)</span> <span class="o">&gt;=</span> <span class="n">threshold</span>
+</span><span id="L-104"><a href="#L-104"><span class="linenos">104</span></a>    <span class="n">false_pass</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">y</span> <span class="o">&amp;</span> <span class="o">~</span><span class="n">pred</span><span class="p">)</span>
+</span><span id="L-105"><a href="#L-105"><span class="linenos">105</span></a>    <span class="n">false_fail</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="o">~</span><span class="n">y</span> <span class="o">&amp;</span> <span class="n">pred</span><span class="p">)</span>
+</span><span id="L-106"><a href="#L-106"><span class="linenos">106</span></a>    <span class="k">return</span> <span class="nb">float</span><span class="p">((</span><span class="n">cost_ratio</span> <span class="o">*</span> <span class="n">false_pass</span> <span class="o">+</span> <span class="n">false_fail</span><span class="p">)</span> <span class="o">/</span> <span class="nb">len</span><span class="p">(</span><span class="n">y</span><span class="p">))</span>
+</span><span id="L-107"><a href="#L-107"><span class="linenos">107</span></a>
+</span><span id="L-108"><a href="#L-108"><span class="linenos">108</span></a>
+</span><span id="L-109"><a href="#L-109"><span class="linenos">109</span></a><span class="k">def</span><span class="w"> </span><span class="nf">candidate_thresholds</span><span class="p">(</span><span class="n">scores</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+</span><span id="L-110"><a href="#L-110"><span class="linenos">110</span></a><span class="w">    </span><span class="sd">"""Candidate thresholds for the cost search.</span>
+</span><span id="L-111"><a href="#L-111"><span class="linenos">111</span></a>
+</span><span id="L-112"><a href="#L-112"><span class="linenos">112</span></a><span class="sd">    Every distinct way of splitting the frames by score is represented exactly</span>
+</span><span id="L-113"><a href="#L-113"><span class="linenos">113</span></a><span class="sd">    once, so searching these candidates finds the true minimum of the cost on</span>
+</span><span id="L-114"><a href="#L-114"><span class="linenos">114</span></a><span class="sd">    the data.</span>
+</span><span id="L-115"><a href="#L-115"><span class="linenos">115</span></a>
+</span><span id="L-116"><a href="#L-116"><span class="linenos">116</span></a><span class="sd">    Args:</span>
+</span><span id="L-117"><a href="#L-117"><span class="linenos">117</span></a><span class="sd">        scores: Defect scores; values outside [0, 1] are clipped.</span>
+</span><span id="L-118"><a href="#L-118"><span class="linenos">118</span></a>
+</span><span id="L-119"><a href="#L-119"><span class="linenos">119</span></a><span class="sd">    Returns:</span>
+</span><span id="L-120"><a href="#L-120"><span class="linenos">120</span></a><span class="sd">        Sorted array: 0 (fail every frame), the midpoints between consecutive</span>
+</span><span id="L-121"><a href="#L-121"><span class="linenos">121</span></a><span class="sd">        distinct scores, and a value just above the highest score, capped at 1.</span>
+</span><span id="L-122"><a href="#L-122"><span class="linenos">122</span></a><span class="sd">    """</span>
+</span><span id="L-123"><a href="#L-123"><span class="linenos">123</span></a>    <span class="n">s</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">unique</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">clip</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">scores</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">),</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">))</span>
+</span><span id="L-124"><a href="#L-124"><span class="linenos">124</span></a>    <span class="n">mids</span> <span class="o">=</span> <span class="p">(</span><span class="n">s</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">+</span> <span class="n">s</span><span class="p">[</span><span class="mi">1</span><span class="p">:])</span> <span class="o">/</span> <span class="mi">2</span> <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">s</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span> <span class="k">else</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([])</span>
+</span><span id="L-125"><a href="#L-125"><span class="linenos">125</span></a>    <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">([[</span><span class="mf">0.0</span><span class="p">],</span> <span class="n">mids</span><span class="p">,</span> <span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">nextafter</span><span class="p">(</span><span class="n">s</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span> <span class="mf">2.0</span><span class="p">)</span> <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">s</span><span class="p">)</span> <span class="k">else</span> <span class="mf">1.0</span><span class="p">]])</span><span class="o">.</span><span class="n">clip</span><span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">)</span>
+</span><span id="L-126"><a href="#L-126"><span class="linenos">126</span></a>
+</span><span id="L-127"><a href="#L-127"><span class="linenos">127</span></a>
+</span><span id="L-128"><a href="#L-128"><span class="linenos">128</span></a><span class="k">def</span><span class="w"> </span><span class="nf">choose_threshold</span><span class="p">(</span>
+</span><span id="L-129"><a href="#L-129"><span class="linenos">129</span></a>    <span class="n">y_fail</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">scores</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">cost_ratio</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">DEFAULT_COST_RATIO</span>
+</span><span id="L-130"><a href="#L-130"><span class="linenos">130</span></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">]:</span>
+</span><span id="L-131"><a href="#L-131"><span class="linenos">131</span></a><span class="w">    </span><span class="sd">"""Threshold that minimises expected cost on labelled data.</span>
+</span><span id="L-132"><a href="#L-132"><span class="linenos">132</span></a>
+</span><span id="L-133"><a href="#L-133"><span class="linenos">133</span></a><span class="sd">    Ties are broken towards the lower threshold, which fails more frames,</span>
+</span><span id="L-134"><a href="#L-134"><span class="linenos">134</span></a><span class="sd">    because a false PASS is the more expensive mistake.</span>
+</span><span id="L-135"><a href="#L-135"><span class="linenos">135</span></a>
+</span><span id="L-136"><a href="#L-136"><span class="linenos">136</span></a><span class="sd">    Args:</span>
+</span><span id="L-137"><a href="#L-137"><span class="linenos">137</span></a><span class="sd">        y_fail: True labels, True = defective frame.</span>
+</span><span id="L-138"><a href="#L-138"><span class="linenos">138</span></a><span class="sd">        scores: Defect scores in [0, 1], one per frame.</span>
+</span><span id="L-139"><a href="#L-139"><span class="linenos">139</span></a><span class="sd">        cost_ratio: Cost of a false PASS relative to a false FAIL.</span>
+</span><span id="L-140"><a href="#L-140"><span class="linenos">140</span></a>
+</span><span id="L-141"><a href="#L-141"><span class="linenos">141</span></a><span class="sd">    Returns:</span>
+</span><span id="L-142"><a href="#L-142"><span class="linenos">142</span></a><span class="sd">        ``(threshold, cost)``: the chosen threshold and its expected cost per</span>
+</span><span id="L-143"><a href="#L-143"><span class="linenos">143</span></a><span class="sd">        frame on these data.</span>
+</span><span id="L-144"><a href="#L-144"><span class="linenos">144</span></a>
+</span><span id="L-145"><a href="#L-145"><span class="linenos">145</span></a><span class="sd">    Raises:</span>
+</span><span id="L-146"><a href="#L-146"><span class="linenos">146</span></a><span class="sd">        ValueError: If there are no frames.</span>
+</span><span id="L-147"><a href="#L-147"><span class="linenos">147</span></a><span class="sd">    """</span>
+</span><span id="L-148"><a href="#L-148"><span class="linenos">148</span></a>    <span class="n">y</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">y_fail</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">bool</span><span class="p">)</span>
+</span><span id="L-149"><a href="#L-149"><span class="linenos">149</span></a>    <span class="k">if</span> <span class="n">y</span><span class="o">.</span><span class="n">size</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+</span><span id="L-150"><a href="#L-150"><span class="linenos">150</span></a>        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"cannot choose a threshold from zero frames"</span><span class="p">)</span>
+</span><span id="L-151"><a href="#L-151"><span class="linenos">151</span></a>    <span class="n">cands</span> <span class="o">=</span> <span class="n">candidate_thresholds</span><span class="p">(</span><span class="n">scores</span><span class="p">)</span>
+</span><span id="L-152"><a href="#L-152"><span class="linenos">152</span></a>    <span class="n">costs</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">expected_cost</span><span class="p">(</span><span class="n">y</span><span class="p">,</span> <span class="n">scores</span><span class="p">,</span> <span class="n">t</span><span class="p">,</span> <span class="n">cost_ratio</span><span class="p">)</span> <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">cands</span><span class="p">])</span>
+</span><span id="L-153"><a href="#L-153"><span class="linenos">153</span></a>    <span class="c1"># Candidates are sorted ascending, so the first minimum is the lowest threshold among ties.</span>
+</span><span id="L-154"><a href="#L-154"><span class="linenos">154</span></a>    <span class="n">i</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">flatnonzero</span><span class="p">(</span><span class="n">costs</span> <span class="o">==</span> <span class="n">costs</span><span class="o">.</span><span class="n">min</span><span class="p">())[</span><span class="mi">0</span><span class="p">])</span>
+</span><span id="L-155"><a href="#L-155"><span class="linenos">155</span></a>    <span class="k">return</span> <span class="nb">float</span><span class="p">(</span><span class="n">cands</span><span class="p">[</span><span class="n">i</span><span class="p">]),</span> <span class="nb">float</span><span class="p">(</span><span class="n">costs</span><span class="p">[</span><span class="n">i</span><span class="p">])</span>
 </span></pre></div>
 
 
@@ -325,19 +369,40 @@ minimise expected cost, where a false PASS (a defective pack shipped) costs
 <div class="attr function">
             
         <span class="def">def</span>
-        <span class="name">frame_score</span><span class="signature pdoc-code multiline">(<span class="param">	<span class="n">boxes</span><span class="p">:</span> <span class="n">Iterable</span><span class="p">[</span><span class="n"><a href="dataset.html#Box">porksort.dataset.Box</a></span><span class="p">]</span>,</span><span class="param">	<span class="n">defect_classes</span><span class="p">:</span> <span class="nb">frozenset</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="nb">frozenset</span><span class="p">({</span><span class="s1">'packaging-error'</span><span class="p">,</span> <span class="s1">'loose-meat'</span><span class="p">,</span> <span class="s1">'twisted-meat'</span><span class="p">,</span> <span class="s1">'wrinkle'</span><span class="p">,</span> <span class="s1">'unsealed'</span><span class="p">})</span></span><span class="return-annotation">) -> <span class="nb">float</span>:</span></span>
+        <span class="name">frame_score</span><span class="signature pdoc-code multiline">(<span class="param">	<span class="n">boxes</span><span class="p">:</span> <span class="n">Iterable</span><span class="p">[</span><span class="n"><a href="dataset.html#Box">porksort.dataset.Box</a></span><span class="p">]</span>,</span><span class="param">	<span class="n">defect_classes</span><span class="p">:</span> <span class="nb">frozenset</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="nb">frozenset</span><span class="p">({</span><span class="s1">'twisted-meat'</span><span class="p">,</span> <span class="s1">'unsealed'</span><span class="p">,</span> <span class="s1">'packaging-error'</span><span class="p">,</span> <span class="s1">'loose-meat'</span><span class="p">,</span> <span class="s1">'wrinkle'</span><span class="p">})</span></span><span class="return-annotation">) -> <span class="nb">float</span>:</span></span>
 
                 <label class="view-source-button" for="frame_score-view-source"><span>View Source</span></label>
 
     </div>
     <a class="headerlink" href="#frame_score"></a>
             <div class="pdoc-code codehilite"><pre><span></span><span id="frame_score-48"><a href="#frame_score-48"><span class="linenos">48</span></a><span class="k">def</span><span class="w"> </span><span class="nf">frame_score</span><span class="p">(</span><span class="n">boxes</span><span class="p">:</span> <span class="n">Iterable</span><span class="p">[</span><span class="n">Box</span><span class="p">],</span> <span class="n">defect_classes</span><span class="p">:</span> <span class="nb">frozenset</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="n">DEFECT_CLASSES</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
-</span><span id="frame_score-49"><a href="#frame_score-49"><span class="linenos">49</span></a><span class="w">    </span><span class="sd">"""Highest confidence among defect boxes, or 0.0 if there are none."""</span>
-</span><span id="frame_score-50"><a href="#frame_score-50"><span class="linenos">50</span></a>    <span class="k">return</span> <span class="nb">max</span><span class="p">((</span><span class="n">b</span><span class="o">.</span><span class="n">conf</span> <span class="k">for</span> <span class="n">b</span> <span class="ow">in</span> <span class="n">boxes</span> <span class="k">if</span> <span class="n">b</span><span class="o">.</span><span class="n">cls</span> <span class="ow">in</span> <span class="n">defect_classes</span><span class="p">),</span> <span class="n">default</span><span class="o">=</span><span class="mf">0.0</span><span class="p">)</span>
+</span><span id="frame_score-49"><a href="#frame_score-49"><span class="linenos">49</span></a><span class="w">    </span><span class="sd">"""Defect score of one frame.</span>
+</span><span id="frame_score-50"><a href="#frame_score-50"><span class="linenos">50</span></a>
+</span><span id="frame_score-51"><a href="#frame_score-51"><span class="linenos">51</span></a><span class="sd">    Args:</span>
+</span><span id="frame_score-52"><a href="#frame_score-52"><span class="linenos">52</span></a><span class="sd">        boxes: Detections for the frame.</span>
+</span><span id="frame_score-53"><a href="#frame_score-53"><span class="linenos">53</span></a><span class="sd">        defect_classes: Classes that count as defects.</span>
+</span><span id="frame_score-54"><a href="#frame_score-54"><span class="linenos">54</span></a>
+</span><span id="frame_score-55"><a href="#frame_score-55"><span class="linenos">55</span></a><span class="sd">    Returns:</span>
+</span><span id="frame_score-56"><a href="#frame_score-56"><span class="linenos">56</span></a><span class="sd">        The highest confidence among defect boxes, or 0.0 if there are none.</span>
+</span><span id="frame_score-57"><a href="#frame_score-57"><span class="linenos">57</span></a><span class="sd">    """</span>
+</span><span id="frame_score-58"><a href="#frame_score-58"><span class="linenos">58</span></a>    <span class="k">return</span> <span class="nb">max</span><span class="p">((</span><span class="n">b</span><span class="o">.</span><span class="n">conf</span> <span class="k">for</span> <span class="n">b</span> <span class="ow">in</span> <span class="n">boxes</span> <span class="k">if</span> <span class="n">b</span><span class="o">.</span><span class="n">cls</span> <span class="ow">in</span> <span class="n">defect_classes</span><span class="p">),</span> <span class="n">default</span><span class="o">=</span><span class="mf">0.0</span><span class="p">)</span>
 </span></pre></div>
 
 
-            <div class="docstring"><p>Highest confidence among defect boxes, or 0.0 if there are none.</p>
+            <div class="docstring"><p>Defect score of one frame.</p>
+
+<h6 id="arguments">Arguments:</h6>
+
+<ul>
+<li><strong>boxes:</strong>  Detections for the frame.</li>
+<li><strong>defect_classes:</strong>  Classes that count as defects.</li>
+</ul>
+
+<h6 id="returns">Returns:</h6>
+
+<blockquote>
+  <p>The highest confidence among defect boxes, or 0.0 if there are none.</p>
+</blockquote>
 </div>
 
 
@@ -347,28 +412,35 @@ minimise expected cost, where a false PASS (a defective pack shipped) costs
 <div class="attr function">
             
         <span class="def">def</span>
-        <span class="name">decide</span><span class="signature pdoc-code multiline">(<span class="param">	<span class="n">boxes</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n"><a href="dataset.html#Box">porksort.dataset.Box</a></span><span class="p">]</span>,</span><span class="param">	<span class="n">threshold</span><span class="p">:</span> <span class="nb">float</span>,</span><span class="param">	<span class="n">defect_classes</span><span class="p">:</span> <span class="nb">frozenset</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="nb">frozenset</span><span class="p">({</span><span class="s1">'packaging-error'</span><span class="p">,</span> <span class="s1">'loose-meat'</span><span class="p">,</span> <span class="s1">'twisted-meat'</span><span class="p">,</span> <span class="s1">'wrinkle'</span><span class="p">,</span> <span class="s1">'unsealed'</span><span class="p">})</span></span><span class="return-annotation">) -> <span class="n"><a href="#Decision">Decision</a></span>:</span></span>
+        <span class="name">decide</span><span class="signature pdoc-code multiline">(<span class="param">	<span class="n">boxes</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n"><a href="dataset.html#Box">porksort.dataset.Box</a></span><span class="p">]</span>,</span><span class="param">	<span class="n">threshold</span><span class="p">:</span> <span class="nb">float</span>,</span><span class="param">	<span class="n">defect_classes</span><span class="p">:</span> <span class="nb">frozenset</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="nb">frozenset</span><span class="p">({</span><span class="s1">'twisted-meat'</span><span class="p">,</span> <span class="s1">'unsealed'</span><span class="p">,</span> <span class="s1">'packaging-error'</span><span class="p">,</span> <span class="s1">'loose-meat'</span><span class="p">,</span> <span class="s1">'wrinkle'</span><span class="p">})</span></span><span class="return-annotation">) -> <span class="n"><a href="#Decision">Decision</a></span>:</span></span>
 
                 <label class="view-source-button" for="decide-view-source"><span>View Source</span></label>
 
     </div>
     <a class="headerlink" href="#decide"></a>
-            <div class="pdoc-code codehilite"><pre><span></span><span id="decide-53"><a href="#decide-53"><span class="linenos">53</span></a><span class="k">def</span><span class="w"> </span><span class="nf">decide</span><span class="p">(</span><span class="n">boxes</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">Box</span><span class="p">],</span> <span class="n">threshold</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">defect_classes</span><span class="p">:</span> <span class="nb">frozenset</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="n">DEFECT_CLASSES</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Decision</span><span class="p">:</span>
-</span><span id="decide-54"><a href="#decide-54"><span class="linenos">54</span></a><span class="w">    </span><span class="sd">"""Apply the pass/fail rule to the detections of one frame.</span>
-</span><span id="decide-55"><a href="#decide-55"><span class="linenos">55</span></a>
-</span><span id="decide-56"><a href="#decide-56"><span class="linenos">56</span></a><span class="sd">    Args:</span>
-</span><span id="decide-57"><a href="#decide-57"><span class="linenos">57</span></a><span class="sd">        boxes: Detections for the frame, each with a confidence.</span>
-</span><span id="decide-58"><a href="#decide-58"><span class="linenos">58</span></a><span class="sd">        threshold: Confidence at or above which a defect box fails the frame.</span>
-</span><span id="decide-59"><a href="#decide-59"><span class="linenos">59</span></a><span class="sd">        defect_classes: Classes that count as defects.</span>
-</span><span id="decide-60"><a href="#decide-60"><span class="linenos">60</span></a>
-</span><span id="decide-61"><a href="#decide-61"><span class="linenos">61</span></a><span class="sd">    Raises:</span>
-</span><span id="decide-62"><a href="#decide-62"><span class="linenos">62</span></a><span class="sd">        ValueError: If ``threshold`` is outside [0, 1].</span>
-</span><span id="decide-63"><a href="#decide-63"><span class="linenos">63</span></a><span class="sd">    """</span>
-</span><span id="decide-64"><a href="#decide-64"><span class="linenos">64</span></a>    <span class="k">if</span> <span class="ow">not</span> <span class="mf">0.0</span> <span class="o">&lt;=</span> <span class="n">threshold</span> <span class="o">&lt;=</span> <span class="mf">1.0</span><span class="p">:</span>
-</span><span id="decide-65"><a href="#decide-65"><span class="linenos">65</span></a>        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"threshold must be in [0, 1], got </span><span class="si">{</span><span class="n">threshold</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
-</span><span id="decide-66"><a href="#decide-66"><span class="linenos">66</span></a>    <span class="n">defects</span> <span class="o">=</span> <span class="p">[</span><span class="n">b</span> <span class="k">for</span> <span class="n">b</span> <span class="ow">in</span> <span class="n">boxes</span> <span class="k">if</span> <span class="n">b</span><span class="o">.</span><span class="n">cls</span> <span class="ow">in</span> <span class="n">defect_classes</span> <span class="ow">and</span> <span class="n">b</span><span class="o">.</span><span class="n">conf</span> <span class="o">&gt;=</span> <span class="n">threshold</span><span class="p">]</span>
-</span><span id="decide-67"><a href="#decide-67"><span class="linenos">67</span></a>    <span class="n">score</span> <span class="o">=</span> <span class="n">frame_score</span><span class="p">(</span><span class="n">boxes</span><span class="p">,</span> <span class="n">defect_classes</span><span class="p">)</span>
-</span><span id="decide-68"><a href="#decide-68"><span class="linenos">68</span></a>    <span class="k">return</span> <span class="n">Decision</span><span class="p">(</span><span class="s2">"FAIL"</span> <span class="k">if</span> <span class="n">defects</span> <span class="k">else</span> <span class="s2">"PASS"</span><span class="p">,</span> <span class="n">score</span><span class="p">,</span> <span class="n">threshold</span><span class="p">,</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">defects</span><span class="p">,</span> <span class="n">key</span><span class="o">=</span><span class="k">lambda</span> <span class="n">b</span><span class="p">:</span> <span class="o">-</span><span class="n">b</span><span class="o">.</span><span class="n">conf</span><span class="p">))</span>
+            <div class="pdoc-code codehilite"><pre><span></span><span id="decide-61"><a href="#decide-61"><span class="linenos">61</span></a><span class="k">def</span><span class="w"> </span><span class="nf">decide</span><span class="p">(</span>
+</span><span id="decide-62"><a href="#decide-62"><span class="linenos">62</span></a>    <span class="n">boxes</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">Box</span><span class="p">],</span> <span class="n">threshold</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">defect_classes</span><span class="p">:</span> <span class="nb">frozenset</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="n">DEFECT_CLASSES</span>
+</span><span id="decide-63"><a href="#decide-63"><span class="linenos">63</span></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Decision</span><span class="p">:</span>
+</span><span id="decide-64"><a href="#decide-64"><span class="linenos">64</span></a><span class="w">    </span><span class="sd">"""Apply the pass/fail rule to the detections of one frame.</span>
+</span><span id="decide-65"><a href="#decide-65"><span class="linenos">65</span></a>
+</span><span id="decide-66"><a href="#decide-66"><span class="linenos">66</span></a><span class="sd">    Args:</span>
+</span><span id="decide-67"><a href="#decide-67"><span class="linenos">67</span></a><span class="sd">        boxes: Detections for the frame, each with a confidence.</span>
+</span><span id="decide-68"><a href="#decide-68"><span class="linenos">68</span></a><span class="sd">        threshold: Confidence at or above which a defect box fails the frame.</span>
+</span><span id="decide-69"><a href="#decide-69"><span class="linenos">69</span></a><span class="sd">        defect_classes: Classes that count as defects.</span>
+</span><span id="decide-70"><a href="#decide-70"><span class="linenos">70</span></a>
+</span><span id="decide-71"><a href="#decide-71"><span class="linenos">71</span></a><span class="sd">    Returns:</span>
+</span><span id="decide-72"><a href="#decide-72"><span class="linenos">72</span></a><span class="sd">        A `Decision`: FAIL if any defect box reaches the threshold, with those</span>
+</span><span id="decide-73"><a href="#decide-73"><span class="linenos">73</span></a><span class="sd">        boxes sorted by confidence (highest first); PASS otherwise.</span>
+</span><span id="decide-74"><a href="#decide-74"><span class="linenos">74</span></a>
+</span><span id="decide-75"><a href="#decide-75"><span class="linenos">75</span></a><span class="sd">    Raises:</span>
+</span><span id="decide-76"><a href="#decide-76"><span class="linenos">76</span></a><span class="sd">        ValueError: If ``threshold`` is outside [0, 1].</span>
+</span><span id="decide-77"><a href="#decide-77"><span class="linenos">77</span></a><span class="sd">    """</span>
+</span><span id="decide-78"><a href="#decide-78"><span class="linenos">78</span></a>    <span class="k">if</span> <span class="ow">not</span> <span class="mf">0.0</span> <span class="o">&lt;=</span> <span class="n">threshold</span> <span class="o">&lt;=</span> <span class="mf">1.0</span><span class="p">:</span>
+</span><span id="decide-79"><a href="#decide-79"><span class="linenos">79</span></a>        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"threshold must be in [0, 1], got </span><span class="si">{</span><span class="n">threshold</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+</span><span id="decide-80"><a href="#decide-80"><span class="linenos">80</span></a>    <span class="n">defects</span> <span class="o">=</span> <span class="p">[</span><span class="n">b</span> <span class="k">for</span> <span class="n">b</span> <span class="ow">in</span> <span class="n">boxes</span> <span class="k">if</span> <span class="n">b</span><span class="o">.</span><span class="n">cls</span> <span class="ow">in</span> <span class="n">defect_classes</span> <span class="ow">and</span> <span class="n">b</span><span class="o">.</span><span class="n">conf</span> <span class="o">&gt;=</span> <span class="n">threshold</span><span class="p">]</span>
+</span><span id="decide-81"><a href="#decide-81"><span class="linenos">81</span></a>    <span class="c1"># The score is reported even for PASS frames, so operators can see near misses.</span>
+</span><span id="decide-82"><a href="#decide-82"><span class="linenos">82</span></a>    <span class="n">score</span> <span class="o">=</span> <span class="n">frame_score</span><span class="p">(</span><span class="n">boxes</span><span class="p">,</span> <span class="n">defect_classes</span><span class="p">)</span>
+</span><span id="decide-83"><a href="#decide-83"><span class="linenos">83</span></a>    <span class="k">return</span> <span class="n">Decision</span><span class="p">(</span><span class="s2">"FAIL"</span> <span class="k">if</span> <span class="n">defects</span> <span class="k">else</span> <span class="s2">"PASS"</span><span class="p">,</span> <span class="n">score</span><span class="p">,</span> <span class="n">threshold</span><span class="p">,</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">defects</span><span class="p">,</span> <span class="n">key</span><span class="o">=</span><span class="k">lambda</span> <span class="n">b</span><span class="p">:</span> <span class="o">-</span><span class="n">b</span><span class="o">.</span><span class="n">conf</span><span class="p">))</span>
 </span></pre></div>
 
 
@@ -381,6 +453,13 @@ minimise expected cost, where a false PASS (a defective pack shipped) costs
 <li><strong>threshold:</strong>  Confidence at or above which a defect box fails the frame.</li>
 <li><strong>defect_classes:</strong>  Classes that count as defects.</li>
 </ul>
+
+<h6 id="returns">Returns:</h6>
+
+<blockquote>
+  <p>A <code><a href="#Decision">Decision</a></code>: FAIL if any defect box reaches the threshold, with those
+  boxes sorted by confidence (highest first); PASS otherwise.</p>
+</blockquote>
 
 <h6 id="raises">Raises:</h6>
 
@@ -402,25 +481,50 @@ minimise expected cost, where a false PASS (a defective pack shipped) costs
 
     </div>
     <a class="headerlink" href="#expected_cost"></a>
-            <div class="pdoc-code codehilite"><pre><span></span><span id="expected_cost-71"><a href="#expected_cost-71"><span class="linenos">71</span></a><span class="k">def</span><span class="w"> </span><span class="nf">expected_cost</span><span class="p">(</span><span class="n">y_fail</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">scores</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">threshold</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
-</span><span id="expected_cost-72"><a href="#expected_cost-72"><span class="linenos">72</span></a>                  <span class="n">cost_ratio</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">DEFAULT_COST_RATIO</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
-</span><span id="expected_cost-73"><a href="#expected_cost-73"><span class="linenos">73</span></a><span class="w">    </span><span class="sd">"""Mean cost per frame at a threshold.</span>
-</span><span id="expected_cost-74"><a href="#expected_cost-74"><span class="linenos">74</span></a>
-</span><span id="expected_cost-75"><a href="#expected_cost-75"><span class="linenos">75</span></a><span class="sd">    Cost is ``cost_ratio`` for each false PASS (defective frame scored below</span>
-</span><span id="expected_cost-76"><a href="#expected_cost-76"><span class="linenos">76</span></a><span class="sd">    the threshold) and 1 for each false FAIL (good frame at or above it).</span>
-</span><span id="expected_cost-77"><a href="#expected_cost-77"><span class="linenos">77</span></a><span class="sd">    """</span>
-</span><span id="expected_cost-78"><a href="#expected_cost-78"><span class="linenos">78</span></a>    <span class="n">y</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">y_fail</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">bool</span><span class="p">)</span>
-</span><span id="expected_cost-79"><a href="#expected_cost-79"><span class="linenos">79</span></a>    <span class="n">pred</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">scores</span><span class="p">)</span> <span class="o">&gt;=</span> <span class="n">threshold</span>
-</span><span id="expected_cost-80"><a href="#expected_cost-80"><span class="linenos">80</span></a>    <span class="n">false_pass</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">y</span> <span class="o">&amp;</span> <span class="o">~</span><span class="n">pred</span><span class="p">)</span>
-</span><span id="expected_cost-81"><a href="#expected_cost-81"><span class="linenos">81</span></a>    <span class="n">false_fail</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="o">~</span><span class="n">y</span> <span class="o">&amp;</span> <span class="n">pred</span><span class="p">)</span>
-</span><span id="expected_cost-82"><a href="#expected_cost-82"><span class="linenos">82</span></a>    <span class="k">return</span> <span class="nb">float</span><span class="p">((</span><span class="n">cost_ratio</span> <span class="o">*</span> <span class="n">false_pass</span> <span class="o">+</span> <span class="n">false_fail</span><span class="p">)</span> <span class="o">/</span> <span class="nb">len</span><span class="p">(</span><span class="n">y</span><span class="p">))</span>
+            <div class="pdoc-code codehilite"><pre><span></span><span id="expected_cost-86"><a href="#expected_cost-86"><span class="linenos"> 86</span></a><span class="k">def</span><span class="w"> </span><span class="nf">expected_cost</span><span class="p">(</span>
+</span><span id="expected_cost-87"><a href="#expected_cost-87"><span class="linenos"> 87</span></a>    <span class="n">y_fail</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">scores</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">threshold</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">cost_ratio</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">DEFAULT_COST_RATIO</span>
+</span><span id="expected_cost-88"><a href="#expected_cost-88"><span class="linenos"> 88</span></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+</span><span id="expected_cost-89"><a href="#expected_cost-89"><span class="linenos"> 89</span></a><span class="w">    </span><span class="sd">"""Mean cost per frame at a threshold.</span>
+</span><span id="expected_cost-90"><a href="#expected_cost-90"><span class="linenos"> 90</span></a>
+</span><span id="expected_cost-91"><a href="#expected_cost-91"><span class="linenos"> 91</span></a><span class="sd">    Each false PASS (a defective frame scored below the threshold) costs</span>
+</span><span id="expected_cost-92"><a href="#expected_cost-92"><span class="linenos"> 92</span></a><span class="sd">    ``cost_ratio`` and each false FAIL (a good frame at or above it) costs 1.</span>
+</span><span id="expected_cost-93"><a href="#expected_cost-93"><span class="linenos"> 93</span></a>
+</span><span id="expected_cost-94"><a href="#expected_cost-94"><span class="linenos"> 94</span></a><span class="sd">    Args:</span>
+</span><span id="expected_cost-95"><a href="#expected_cost-95"><span class="linenos"> 95</span></a><span class="sd">        y_fail: True labels, True = defective frame.</span>
+</span><span id="expected_cost-96"><a href="#expected_cost-96"><span class="linenos"> 96</span></a><span class="sd">        scores: Defect scores in [0, 1], one per frame.</span>
+</span><span id="expected_cost-97"><a href="#expected_cost-97"><span class="linenos"> 97</span></a><span class="sd">        threshold: Frames with score &gt;= threshold are predicted FAIL.</span>
+</span><span id="expected_cost-98"><a href="#expected_cost-98"><span class="linenos"> 98</span></a><span class="sd">        cost_ratio: Cost of a false PASS relative to a false FAIL.</span>
+</span><span id="expected_cost-99"><a href="#expected_cost-99"><span class="linenos"> 99</span></a>
+</span><span id="expected_cost-100"><a href="#expected_cost-100"><span class="linenos">100</span></a><span class="sd">    Returns:</span>
+</span><span id="expected_cost-101"><a href="#expected_cost-101"><span class="linenos">101</span></a><span class="sd">        ``(cost_ratio * false PASSes + false FAILs) / number of frames``.</span>
+</span><span id="expected_cost-102"><a href="#expected_cost-102"><span class="linenos">102</span></a><span class="sd">    """</span>
+</span><span id="expected_cost-103"><a href="#expected_cost-103"><span class="linenos">103</span></a>    <span class="n">y</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">y_fail</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">bool</span><span class="p">)</span>
+</span><span id="expected_cost-104"><a href="#expected_cost-104"><span class="linenos">104</span></a>    <span class="n">pred</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">scores</span><span class="p">)</span> <span class="o">&gt;=</span> <span class="n">threshold</span>
+</span><span id="expected_cost-105"><a href="#expected_cost-105"><span class="linenos">105</span></a>    <span class="n">false_pass</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">y</span> <span class="o">&amp;</span> <span class="o">~</span><span class="n">pred</span><span class="p">)</span>
+</span><span id="expected_cost-106"><a href="#expected_cost-106"><span class="linenos">106</span></a>    <span class="n">false_fail</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="o">~</span><span class="n">y</span> <span class="o">&amp;</span> <span class="n">pred</span><span class="p">)</span>
+</span><span id="expected_cost-107"><a href="#expected_cost-107"><span class="linenos">107</span></a>    <span class="k">return</span> <span class="nb">float</span><span class="p">((</span><span class="n">cost_ratio</span> <span class="o">*</span> <span class="n">false_pass</span> <span class="o">+</span> <span class="n">false_fail</span><span class="p">)</span> <span class="o">/</span> <span class="nb">len</span><span class="p">(</span><span class="n">y</span><span class="p">))</span>
 </span></pre></div>
 
 
             <div class="docstring"><p>Mean cost per frame at a threshold.</p>
 
-<p>Cost is <code>cost_ratio</code> for each false PASS (defective frame scored below
-the threshold) and 1 for each false FAIL (good frame at or above it).</p>
+<p>Each false PASS (a defective frame scored below the threshold) costs
+<code>cost_ratio</code> and each false FAIL (a good frame at or above it) costs 1.</p>
+
+<h6 id="arguments">Arguments:</h6>
+
+<ul>
+<li><strong>y_fail:</strong>  True labels, True = defective frame.</li>
+<li><strong>scores:</strong>  Defect scores in [0, 1], one per frame.</li>
+<li><strong>threshold:</strong>  Frames with score &gt;= threshold are predicted FAIL.</li>
+<li><strong>cost_ratio:</strong>  Cost of a false PASS relative to a false FAIL.</li>
+</ul>
+
+<h6 id="returns">Returns:</h6>
+
+<blockquote>
+  <p><code>(cost_ratio * false PASSes + false FAILs) / number of frames</code>.</p>
+</blockquote>
 </div>
 
 
@@ -436,22 +540,44 @@ the threshold) and 1 for each false FAIL (good frame at or above it).</p>
 
     </div>
     <a class="headerlink" href="#candidate_thresholds"></a>
-            <div class="pdoc-code codehilite"><pre><span></span><span id="candidate_thresholds-85"><a href="#candidate_thresholds-85"><span class="linenos">85</span></a><span class="k">def</span><span class="w"> </span><span class="nf">candidate_thresholds</span><span class="p">(</span><span class="n">scores</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
-</span><span id="candidate_thresholds-86"><a href="#candidate_thresholds-86"><span class="linenos">86</span></a><span class="w">    </span><span class="sd">"""Midpoints between consecutive distinct scores, plus both extremes.</span>
-</span><span id="candidate_thresholds-87"><a href="#candidate_thresholds-87"><span class="linenos">87</span></a>
-</span><span id="candidate_thresholds-88"><a href="#candidate_thresholds-88"><span class="linenos">88</span></a><span class="sd">    Every distinct way of splitting the frames is represented exactly once, so</span>
-</span><span id="candidate_thresholds-89"><a href="#candidate_thresholds-89"><span class="linenos">89</span></a><span class="sd">    searching these candidates finds the true minimum of the cost on the data.</span>
-</span><span id="candidate_thresholds-90"><a href="#candidate_thresholds-90"><span class="linenos">90</span></a><span class="sd">    """</span>
-</span><span id="candidate_thresholds-91"><a href="#candidate_thresholds-91"><span class="linenos">91</span></a>    <span class="n">s</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">unique</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">clip</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">scores</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">),</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">))</span>
-</span><span id="candidate_thresholds-92"><a href="#candidate_thresholds-92"><span class="linenos">92</span></a>    <span class="n">mids</span> <span class="o">=</span> <span class="p">(</span><span class="n">s</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">+</span> <span class="n">s</span><span class="p">[</span><span class="mi">1</span><span class="p">:])</span> <span class="o">/</span> <span class="mi">2</span> <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">s</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span> <span class="k">else</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([])</span>
-</span><span id="candidate_thresholds-93"><a href="#candidate_thresholds-93"><span class="linenos">93</span></a>    <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">([[</span><span class="mf">0.0</span><span class="p">],</span> <span class="n">mids</span><span class="p">,</span> <span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">nextafter</span><span class="p">(</span><span class="n">s</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span> <span class="mf">2.0</span><span class="p">)</span> <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">s</span><span class="p">)</span> <span class="k">else</span> <span class="mf">1.0</span><span class="p">]])</span><span class="o">.</span><span class="n">clip</span><span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">)</span>
+            <div class="pdoc-code codehilite"><pre><span></span><span id="candidate_thresholds-110"><a href="#candidate_thresholds-110"><span class="linenos">110</span></a><span class="k">def</span><span class="w"> </span><span class="nf">candidate_thresholds</span><span class="p">(</span><span class="n">scores</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+</span><span id="candidate_thresholds-111"><a href="#candidate_thresholds-111"><span class="linenos">111</span></a><span class="w">    </span><span class="sd">"""Candidate thresholds for the cost search.</span>
+</span><span id="candidate_thresholds-112"><a href="#candidate_thresholds-112"><span class="linenos">112</span></a>
+</span><span id="candidate_thresholds-113"><a href="#candidate_thresholds-113"><span class="linenos">113</span></a><span class="sd">    Every distinct way of splitting the frames by score is represented exactly</span>
+</span><span id="candidate_thresholds-114"><a href="#candidate_thresholds-114"><span class="linenos">114</span></a><span class="sd">    once, so searching these candidates finds the true minimum of the cost on</span>
+</span><span id="candidate_thresholds-115"><a href="#candidate_thresholds-115"><span class="linenos">115</span></a><span class="sd">    the data.</span>
+</span><span id="candidate_thresholds-116"><a href="#candidate_thresholds-116"><span class="linenos">116</span></a>
+</span><span id="candidate_thresholds-117"><a href="#candidate_thresholds-117"><span class="linenos">117</span></a><span class="sd">    Args:</span>
+</span><span id="candidate_thresholds-118"><a href="#candidate_thresholds-118"><span class="linenos">118</span></a><span class="sd">        scores: Defect scores; values outside [0, 1] are clipped.</span>
+</span><span id="candidate_thresholds-119"><a href="#candidate_thresholds-119"><span class="linenos">119</span></a>
+</span><span id="candidate_thresholds-120"><a href="#candidate_thresholds-120"><span class="linenos">120</span></a><span class="sd">    Returns:</span>
+</span><span id="candidate_thresholds-121"><a href="#candidate_thresholds-121"><span class="linenos">121</span></a><span class="sd">        Sorted array: 0 (fail every frame), the midpoints between consecutive</span>
+</span><span id="candidate_thresholds-122"><a href="#candidate_thresholds-122"><span class="linenos">122</span></a><span class="sd">        distinct scores, and a value just above the highest score, capped at 1.</span>
+</span><span id="candidate_thresholds-123"><a href="#candidate_thresholds-123"><span class="linenos">123</span></a><span class="sd">    """</span>
+</span><span id="candidate_thresholds-124"><a href="#candidate_thresholds-124"><span class="linenos">124</span></a>    <span class="n">s</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">unique</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">clip</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">scores</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">),</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">))</span>
+</span><span id="candidate_thresholds-125"><a href="#candidate_thresholds-125"><span class="linenos">125</span></a>    <span class="n">mids</span> <span class="o">=</span> <span class="p">(</span><span class="n">s</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">+</span> <span class="n">s</span><span class="p">[</span><span class="mi">1</span><span class="p">:])</span> <span class="o">/</span> <span class="mi">2</span> <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">s</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span> <span class="k">else</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([])</span>
+</span><span id="candidate_thresholds-126"><a href="#candidate_thresholds-126"><span class="linenos">126</span></a>    <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">([[</span><span class="mf">0.0</span><span class="p">],</span> <span class="n">mids</span><span class="p">,</span> <span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">nextafter</span><span class="p">(</span><span class="n">s</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span> <span class="mf">2.0</span><span class="p">)</span> <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">s</span><span class="p">)</span> <span class="k">else</span> <span class="mf">1.0</span><span class="p">]])</span><span class="o">.</span><span class="n">clip</span><span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">)</span>
 </span></pre></div>
 
 
-            <div class="docstring"><p>Midpoints between consecutive distinct scores, plus both extremes.</p>
+            <div class="docstring"><p>Candidate thresholds for the cost search.</p>
 
-<p>Every distinct way of splitting the frames is represented exactly once, so
-searching these candidates finds the true minimum of the cost on the data.</p>
+<p>Every distinct way of splitting the frames by score is represented exactly
+once, so searching these candidates finds the true minimum of the cost on
+the data.</p>
+
+<h6 id="arguments">Arguments:</h6>
+
+<ul>
+<li><strong>scores:</strong>  Defect scores; values outside [0, 1] are clipped.</li>
+</ul>
+
+<h6 id="returns">Returns:</h6>
+
+<blockquote>
+  <p>Sorted array: 0 (fail every frame), the midpoints between consecutive
+  distinct scores, and a value just above the highest score, capped at 1.</p>
+</blockquote>
 </div>
 
 
@@ -467,23 +593,34 @@ searching these candidates finds the true minimum of the cost on the data.</p>
 
     </div>
     <a class="headerlink" href="#choose_threshold"></a>
-            <div class="pdoc-code codehilite"><pre><span></span><span id="choose_threshold-96"><a href="#choose_threshold-96"><span class="linenos"> 96</span></a><span class="k">def</span><span class="w"> </span><span class="nf">choose_threshold</span><span class="p">(</span><span class="n">y_fail</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">scores</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
-</span><span id="choose_threshold-97"><a href="#choose_threshold-97"><span class="linenos"> 97</span></a>                     <span class="n">cost_ratio</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">DEFAULT_COST_RATIO</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">]:</span>
-</span><span id="choose_threshold-98"><a href="#choose_threshold-98"><span class="linenos"> 98</span></a><span class="w">    </span><span class="sd">"""Threshold that minimises expected cost on labelled data.</span>
-</span><span id="choose_threshold-99"><a href="#choose_threshold-99"><span class="linenos"> 99</span></a>
-</span><span id="choose_threshold-100"><a href="#choose_threshold-100"><span class="linenos">100</span></a><span class="sd">    Ties are broken towards the lower threshold, which fails more frames,</span>
-</span><span id="choose_threshold-101"><a href="#choose_threshold-101"><span class="linenos">101</span></a><span class="sd">    because a false PASS is the more expensive mistake.</span>
-</span><span id="choose_threshold-102"><a href="#choose_threshold-102"><span class="linenos">102</span></a>
-</span><span id="choose_threshold-103"><a href="#choose_threshold-103"><span class="linenos">103</span></a><span class="sd">    Returns:</span>
-</span><span id="choose_threshold-104"><a href="#choose_threshold-104"><span class="linenos">104</span></a><span class="sd">        ``(threshold, cost)``.</span>
-</span><span id="choose_threshold-105"><a href="#choose_threshold-105"><span class="linenos">105</span></a><span class="sd">    """</span>
-</span><span id="choose_threshold-106"><a href="#choose_threshold-106"><span class="linenos">106</span></a>    <span class="n">y</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">y_fail</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">bool</span><span class="p">)</span>
-</span><span id="choose_threshold-107"><a href="#choose_threshold-107"><span class="linenos">107</span></a>    <span class="k">if</span> <span class="n">y</span><span class="o">.</span><span class="n">size</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
-</span><span id="choose_threshold-108"><a href="#choose_threshold-108"><span class="linenos">108</span></a>        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"cannot choose a threshold from zero frames"</span><span class="p">)</span>
-</span><span id="choose_threshold-109"><a href="#choose_threshold-109"><span class="linenos">109</span></a>    <span class="n">cands</span> <span class="o">=</span> <span class="n">candidate_thresholds</span><span class="p">(</span><span class="n">scores</span><span class="p">)</span>
-</span><span id="choose_threshold-110"><a href="#choose_threshold-110"><span class="linenos">110</span></a>    <span class="n">costs</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">expected_cost</span><span class="p">(</span><span class="n">y</span><span class="p">,</span> <span class="n">scores</span><span class="p">,</span> <span class="n">t</span><span class="p">,</span> <span class="n">cost_ratio</span><span class="p">)</span> <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">cands</span><span class="p">])</span>
-</span><span id="choose_threshold-111"><a href="#choose_threshold-111"><span class="linenos">111</span></a>    <span class="n">i</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">flatnonzero</span><span class="p">(</span><span class="n">costs</span> <span class="o">==</span> <span class="n">costs</span><span class="o">.</span><span class="n">min</span><span class="p">())[</span><span class="mi">0</span><span class="p">])</span>
-</span><span id="choose_threshold-112"><a href="#choose_threshold-112"><span class="linenos">112</span></a>    <span class="k">return</span> <span class="nb">float</span><span class="p">(</span><span class="n">cands</span><span class="p">[</span><span class="n">i</span><span class="p">]),</span> <span class="nb">float</span><span class="p">(</span><span class="n">costs</span><span class="p">[</span><span class="n">i</span><span class="p">])</span>
+            <div class="pdoc-code codehilite"><pre><span></span><span id="choose_threshold-129"><a href="#choose_threshold-129"><span class="linenos">129</span></a><span class="k">def</span><span class="w"> </span><span class="nf">choose_threshold</span><span class="p">(</span>
+</span><span id="choose_threshold-130"><a href="#choose_threshold-130"><span class="linenos">130</span></a>    <span class="n">y_fail</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">scores</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">cost_ratio</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">DEFAULT_COST_RATIO</span>
+</span><span id="choose_threshold-131"><a href="#choose_threshold-131"><span class="linenos">131</span></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">]:</span>
+</span><span id="choose_threshold-132"><a href="#choose_threshold-132"><span class="linenos">132</span></a><span class="w">    </span><span class="sd">"""Threshold that minimises expected cost on labelled data.</span>
+</span><span id="choose_threshold-133"><a href="#choose_threshold-133"><span class="linenos">133</span></a>
+</span><span id="choose_threshold-134"><a href="#choose_threshold-134"><span class="linenos">134</span></a><span class="sd">    Ties are broken towards the lower threshold, which fails more frames,</span>
+</span><span id="choose_threshold-135"><a href="#choose_threshold-135"><span class="linenos">135</span></a><span class="sd">    because a false PASS is the more expensive mistake.</span>
+</span><span id="choose_threshold-136"><a href="#choose_threshold-136"><span class="linenos">136</span></a>
+</span><span id="choose_threshold-137"><a href="#choose_threshold-137"><span class="linenos">137</span></a><span class="sd">    Args:</span>
+</span><span id="choose_threshold-138"><a href="#choose_threshold-138"><span class="linenos">138</span></a><span class="sd">        y_fail: True labels, True = defective frame.</span>
+</span><span id="choose_threshold-139"><a href="#choose_threshold-139"><span class="linenos">139</span></a><span class="sd">        scores: Defect scores in [0, 1], one per frame.</span>
+</span><span id="choose_threshold-140"><a href="#choose_threshold-140"><span class="linenos">140</span></a><span class="sd">        cost_ratio: Cost of a false PASS relative to a false FAIL.</span>
+</span><span id="choose_threshold-141"><a href="#choose_threshold-141"><span class="linenos">141</span></a>
+</span><span id="choose_threshold-142"><a href="#choose_threshold-142"><span class="linenos">142</span></a><span class="sd">    Returns:</span>
+</span><span id="choose_threshold-143"><a href="#choose_threshold-143"><span class="linenos">143</span></a><span class="sd">        ``(threshold, cost)``: the chosen threshold and its expected cost per</span>
+</span><span id="choose_threshold-144"><a href="#choose_threshold-144"><span class="linenos">144</span></a><span class="sd">        frame on these data.</span>
+</span><span id="choose_threshold-145"><a href="#choose_threshold-145"><span class="linenos">145</span></a>
+</span><span id="choose_threshold-146"><a href="#choose_threshold-146"><span class="linenos">146</span></a><span class="sd">    Raises:</span>
+</span><span id="choose_threshold-147"><a href="#choose_threshold-147"><span class="linenos">147</span></a><span class="sd">        ValueError: If there are no frames.</span>
+</span><span id="choose_threshold-148"><a href="#choose_threshold-148"><span class="linenos">148</span></a><span class="sd">    """</span>
+</span><span id="choose_threshold-149"><a href="#choose_threshold-149"><span class="linenos">149</span></a>    <span class="n">y</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">y_fail</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">bool</span><span class="p">)</span>
+</span><span id="choose_threshold-150"><a href="#choose_threshold-150"><span class="linenos">150</span></a>    <span class="k">if</span> <span class="n">y</span><span class="o">.</span><span class="n">size</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+</span><span id="choose_threshold-151"><a href="#choose_threshold-151"><span class="linenos">151</span></a>        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"cannot choose a threshold from zero frames"</span><span class="p">)</span>
+</span><span id="choose_threshold-152"><a href="#choose_threshold-152"><span class="linenos">152</span></a>    <span class="n">cands</span> <span class="o">=</span> <span class="n">candidate_thresholds</span><span class="p">(</span><span class="n">scores</span><span class="p">)</span>
+</span><span id="choose_threshold-153"><a href="#choose_threshold-153"><span class="linenos">153</span></a>    <span class="n">costs</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">expected_cost</span><span class="p">(</span><span class="n">y</span><span class="p">,</span> <span class="n">scores</span><span class="p">,</span> <span class="n">t</span><span class="p">,</span> <span class="n">cost_ratio</span><span class="p">)</span> <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">cands</span><span class="p">])</span>
+</span><span id="choose_threshold-154"><a href="#choose_threshold-154"><span class="linenos">154</span></a>    <span class="c1"># Candidates are sorted ascending, so the first minimum is the lowest threshold among ties.</span>
+</span><span id="choose_threshold-155"><a href="#choose_threshold-155"><span class="linenos">155</span></a>    <span class="n">i</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">flatnonzero</span><span class="p">(</span><span class="n">costs</span> <span class="o">==</span> <span class="n">costs</span><span class="o">.</span><span class="n">min</span><span class="p">())[</span><span class="mi">0</span><span class="p">])</span>
+</span><span id="choose_threshold-156"><a href="#choose_threshold-156"><span class="linenos">156</span></a>    <span class="k">return</span> <span class="nb">float</span><span class="p">(</span><span class="n">cands</span><span class="p">[</span><span class="n">i</span><span class="p">]),</span> <span class="nb">float</span><span class="p">(</span><span class="n">costs</span><span class="p">[</span><span class="n">i</span><span class="p">])</span>
 </span></pre></div>
 
 
@@ -492,11 +629,26 @@ searching these candidates finds the true minimum of the cost on the data.</p>
 <p>Ties are broken towards the lower threshold, which fails more frames,
 because a false PASS is the more expensive mistake.</p>
 
+<h6 id="arguments">Arguments:</h6>
+
+<ul>
+<li><strong>y_fail:</strong>  True labels, True = defective frame.</li>
+<li><strong>scores:</strong>  Defect scores in [0, 1], one per frame.</li>
+<li><strong>cost_ratio:</strong>  Cost of a false PASS relative to a false FAIL.</li>
+</ul>
+
 <h6 id="returns">Returns:</h6>
 
 <blockquote>
-  <p><code>(threshold, cost)</code>.</p>
+  <p><code>(threshold, cost)</code>: the chosen threshold and its expected cost per
+  frame on these data.</p>
 </blockquote>
+
+<h6 id="raises">Raises:</h6>
+
+<ul>
+<li><strong>ValueError:</strong>  If there are no frames.</li>
+</ul>
 </div>
 
 
