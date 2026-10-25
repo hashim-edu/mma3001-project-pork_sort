@@ -297,20 +297,44 @@ def main() -> None:
     fig.savefig(FIG / "roc_blocked_test.png", dpi=150)
     plt.close(fig)
 
-    # Leakage: AUC on Roboflow test vs blocked test, per model
-    piv = table.pivot(index="model", columns="split", values="roc_auc").dropna()
-    piv = piv.drop(index=LABEL["majority"], errors="ignore")
-    if len(piv) and {"blocked", "roboflow"} <= set(piv.columns):
-        fig, ax = plt.subplots(figsize=(6, 3.2))
-        x = np.arange(len(piv))
-        ax.bar(x - 0.2, piv["roboflow"], 0.4, label="Roboflow split (leaky)")
-        ax.bar(x + 0.2, piv["blocked"], 0.4, label="blocked split")
-        ax.set_xticks(x, piv.index, rotation=15, fontsize=8)
-        ax.set_ylim(0.4, 1.0)
-        ax.set_ylabel("test ROC AUC")
-        ax.set_title("Effect of the split on measured performance")
-        ax.legend(fontsize=8)
-        fig.tight_layout()
+    # Leakage: test AUC on the Roboflow split against the blocked split, per model, drawn as
+    # points with 95 % bootstrap intervals. The Roboflow test split has only 80 frames (12 PASS),
+    # so its intervals are wide and small differences are not meaningful.
+    sub = table[table["model"] != LABEL["majority"]]
+    piv = {
+        v: sub.pivot(index="model", columns="split", values=v) for v in ("roc_auc", "auc_ci_lo", "auc_ci_hi")
+    }
+    if {"blocked", "roboflow"} <= set(piv["roc_auc"].columns):
+        models = [m for m in LABEL.values() if m in piv["roc_auc"].dropna().index]
+        fig, ax = plt.subplots(figsize=(6.5, 3.4))
+        y = np.arange(len(models))[::-1]
+        for off, split, name, colour, marker in (
+            (0.17, "roboflow", "Roboflow split (leaky), 80 test frames", "#eb6834", "s"),
+            (-0.17, "blocked", "blocked split, 174 test frames", "#2a78d6", "o"),
+        ):
+            auc = piv["roc_auc"].loc[models, split].to_numpy()
+            lo = piv["auc_ci_lo"].loc[models, split].to_numpy()
+            hi = piv["auc_ci_hi"].loc[models, split].to_numpy()
+            ax.errorbar(
+                auc,
+                y + off,
+                xerr=[auc - lo, hi - auc],
+                fmt=marker,
+                color=colour,
+                ms=6,
+                lw=1.5,
+                capsize=2,
+                label=name,
+            )
+        ax.set_yticks(y, models, fontsize=8)
+        ax.set_xlim(0.5, 1.0)
+        ax.set_xlabel("test ROC AUC with 95% bootstrap interval")
+        ax.grid(axis="x", color="#dddddd", lw=0.6)
+        ax.set_axisbelow(True)
+        for side in ("top", "right"):
+            ax.spines[side].set_visible(False)
+        fig.legend(fontsize=8, loc="upper center", ncol=2, frameon=False)
+        fig.tight_layout(rect=(0, 0, 1, 0.91))
         fig.savefig(FIG / "leakage_auc.png", dpi=150)
         plt.close(fig)
 

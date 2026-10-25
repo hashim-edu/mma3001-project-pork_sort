@@ -29,6 +29,10 @@ reports/
 demo_frames/
 report/*.html
 
+# Weights of the Roboflow-split comparison run (its predictions are cached as JSON in the run folder;
+# regenerate with the Colab notebook and SPLIT = "roboflow")
+results/yolo/yolov8n_roboflow/weights/
+
 # Extra YOLO exports used only for the resolution study (regenerate with the Colab notebook)
 results/yolo/**/best_fp32_320.onnx
 results/yolo/**/best_fp32_800.onnx

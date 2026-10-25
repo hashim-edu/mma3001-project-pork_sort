@@ -14,5 +14,21 @@
    "score_abs_diff_mean": 0.00021097411712010702,
    "decision_flips": 0
   }
+ },
+ "roboflow": {
+  "onnx_vs_ultralytics": {
+   "frames": 60,
+   "frame_score_abs_diff_max": 0.1464099884033203,
+   "frame_score_abs_diff_mean": 0.01667494864668697,
+   "ultralytics_boxes_conf_ge_0.25": 53,
+   "matched_iou_ge_0.9": 46,
+   "matched_iou_median": 0.9672195798264289
+  },
+  "fp16_vs_fp32": {
+   "frames": 60,
+   "score_abs_diff_max": 0.002975970506668091,
+   "score_abs_diff_mean": 0.0002920404076576233,
+   "decision_flips": 0
+  }
  }
 }

@@ -22,8 +22,10 @@ Blocked test split (174 frames, 34 PASS), thresholds chosen on validation data:
   re-checking every pack (the best passes 2 of 34 good test frames); the selected detector pays off at a
   cost ratio of 1, where it passes 56% of good frames and lets 3.6% of defective frames through.
 - Apple M4 CPU: 36.7 ms inference, 41 ms end to end per frame at 480 px.
-- The provided Roboflow split leaks (test frames sit within 1 to 30 frames of training frames) and
-  inflates classical AUC by 0.07 to 0.10; all headline results use the blocked split.
+- The provided Roboflow split leaks (test frames sit within 1 to 30 frames of training frames). It
+  inflates the AUC of logistic regression and the SVM by 0.07 to 0.10; for YOLOv8n trained on it, test
+  AUC was 0.885 against 0.887 on the blocked split, no measurable difference with 80 test frames. All
+  headline results use the blocked split (`results/figures/leakage_auc.png`).
 
 Full tables: `results/comparison.md`, `results/comparison_details.json`, `results/performance_*.json`.
 
@@ -72,7 +74,8 @@ open reports/index.html
 2. `python scripts/01_data_audit.py`: class balance, leakage analysis, tray pitch, builds `splits/blocked_split.csv`.
 3. `python scripts/02_classical_models.py`: baseline, logistic regression, decision tree, SVM and MLP on both splits.
 4. `notebooks/03_train_yolo_colab.ipynb` on Google Colab (T4 GPU): trains YOLOv8n and exports ONNX at
-   320, 480, 640 and 800 px plus fp16. Unzip its output into `results/yolo/yolov8n_blocked/`.
+   320, 480, 640 and 800 px plus fp16. Unzip its output into `results/yolo/yolov8n_blocked/`. For the
+   leakage comparison, run it again with `SPLIT = "roboflow"` and unzip into `results/yolo/yolov8n_roboflow/`.
 5. `python scripts/04_evaluate_and_compare.py`: pass/fail evaluation of every model, thresholds per cost
    ratio, check of the ONNX pipeline against Ultralytics, fp16 against fp32.
 6. `python scripts/05_performance.py`: profiling, feature ablation and optimisation, resolution and
