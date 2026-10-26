@@ -64,12 +64,14 @@ SELECTED = "yolov8n_onnx480"
 
 def onnx_predictions(run_dir: Path, parts: dict[str, pd.DataFrame], weights: str) -> dict | None:
     """Run the deployed ONNX pipeline on val and test once and cache the boxes as JSON."""
-    w = run_dir / "weights" / weights
-    if not w.exists():
-        return None
+    # Use the cached boxes when present, so the tables reproduce from a clone without the
+    # ONNX exports that are too large to commit (see .gitignore).
     cache = run_dir / f"predictions_{Path(weights).stem}.json"
     if cache.exists():
         return json.loads(cache.read_text())
+    w = run_dir / "weights" / weights
+    if not w.exists():
+        return None
     from porksort.detector import OnnxYoloDetector
     from porksort.features import load_rgb
 
@@ -197,6 +199,8 @@ def main() -> None:
     FIG.mkdir(parents=True, exist_ok=True)
     index = build_index()
     rows, roc_data, all_results, verification = [], {}, {}, {}
+    vfile = RESULTS_DIR / "yolo_verification.json"
+    previous_verification = json.loads(vfile.read_text()) if vfile.exists() else {}
     for split in ("blocked", "roboflow"):
         df = load_split(index, split)
         parts = {s: df[df["split"] == s].reset_index(drop=True) for s in ("val", "test")}
@@ -251,7 +255,11 @@ def main() -> None:
                 tfile.write_text(json.dumps(tj, indent=1))
         if "yolov8n" in scores and (run / "threshold.json").exists():
             preds = json.loads((run / "predictions.json").read_text())
-            verification[split] = verify_onnx(run, parts, preds)
+            result = verify_onnx(run, parts, preds)
+            # Without the ONNX files the check cannot rerun; keep the result already on record.
+            if "skipped" in result and split in previous_verification:
+                result = previous_verification[split]
+            verification[split] = result
 
     table = pd.DataFrame(rows)
     table.to_csv(RESULTS_DIR / "comparison.csv", index=False)
